@@ -188,6 +188,23 @@ HOOK_DEFINE_TRAMPOLINE(EmitterSetInitialize) {
     }
 };
 
+HOOK_DEFINE_TRAMPOLINE(UpdatePartsGraphics) {
+    static void Callback(void* graphicsSystemInfo, void* updateInfo) {
+        float& step = Field<float>(updateInfo, 0);
+        float tickStep = step;
+        step = tickStep * s_FrameTicks;
+        Orig(graphicsSystemInfo, updateInfo);
+        step = tickStep;
+    }
+};
+
+HOOK_DEFINE_TRAMPOLINE(FluidSimulateWaveUpdate) {
+    static void Callback(void* wave, void* updateInfo) {
+        if (s_RunCalcThisFrame)
+            Orig(wave, updateInfo);
+    }
+};
+
 /* Both of ModelCtrl's GPU upload paths upload blended bone matrices. */
 HOOK_DEFINE_TRAMPOLINE(ModelCtrlUpdateModelDrawBuffer) {
     static void Callback(void* modelCtrl, int bufferIndex) {
@@ -293,6 +310,8 @@ extern "C" void exl_main(void* x0, void* x1) {
     LiveActorKitPreDrawGraphics::InstallAtOffset(smo::offsets::LiveActorKit_preDrawGraphics);
     EffectSystemPreprocess::InstallAtOffset(smo::offsets::EffectSystem_preprocess);
     VfxSystemCalculateGroup::InstallAtOffset(smo::offsets::VfxSystem_CalculateGroup);
+    UpdatePartsGraphics::InstallAtOffset(smo::offsets::GraphicsSystemInfo_updatePartsGraphics);
+    FluidSimulateWaveUpdate::InstallAtOffset(smo::offsets::FluidSimulateWave_update);
     EmitterSetCalculate::InstallAtOffset(smo::offsets::EmitterSet_Calculate);
     EmitterSetInitialize::InstallAtOffset(smo::offsets::EmitterSet_Initialize);
     ModelCtrlUpdateModelDrawBuffer::InstallAtOffset(smo::offsets::ModelCtrl_updateModelDrawBuffer);

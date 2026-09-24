@@ -108,6 +108,16 @@ namespace smo::offsets {
     constexpr ptrdiff_t EmitterSet_Calculate     = 0xb2b274;
     constexpr ptrdiff_t EmitterSet_Initialize    = 0xb2a928;
 
+    /*
+     * "Parts graphics" (water, ocean, sky, clouds, noise textures...) are updated every
+     * updateGraphics with a GraphicsUpdateInfo whose first field is a time step (1.0 per tick) that
+     * they accumulate. We scale it to each frame's share of a tick. FluidSimulateWave (ripples) is
+     * the exception: its calcGpu runs one fixed simulation step whenever its time changed at all, so
+     * it only advances on logic frames.
+     */
+    constexpr ptrdiff_t GraphicsSystemInfo_updatePartsGraphics = 0x8799b4;
+    constexpr ptrdiff_t FluidSimulateWave_update               = 0x899510;
+
     /* al::Scene::~Scene (D1/D2); every derived scene destructor ends up here. */
     constexpr ptrdiff_t Scene_dtor = 0x9ce52c;
 }
