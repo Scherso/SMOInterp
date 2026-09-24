@@ -1,6 +1,6 @@
 # SMOInterp
 
-Super Mario Odyssey at your display's refresh rate (120 Hz, 144 Hz, and so on) in the [Eden](https://eden-emu.dev) emulator, without speeding the game up.
+Super Mario Odyssey at your display's refresh rate (120 Hz, 144 Hz, and so on) in yuzu-based emulators ([Eden](https://eden-emu.dev), yuzu, Citron, Sudachi), without speeding the game up.
 
 SMO's logic is built around exactly 60 steps per second, so simply unlocking the frame rate makes the whole game run faster. SMOInterp keeps the logic at 60 Hz and draws extra frames in between. Each extra frame blends the camera, every model and the particle effects between the last two logic steps, so motion is smooth.
 
@@ -18,13 +18,21 @@ It's a code mod built with [exlaunch](https://github.com/shadowninja108/exlaunch
 ## Requirements
 
 - Super Mario Odyssey **1.0.0**. The mod checks the game version and does nothing on any other version.
-- Eden
+- Eden, yuzu, or another yuzu-based emulator (Citron, Sudachi), on Windows, Linux or Android
 
 ## Install
 
-1. In Eden, right-click SMO → **Properties → Add-ons** and **uncheck the Update**, so the game runs as 1.0.0. Back up your save first.
-2. Extract the [release](../../releases) zip into `~/.local/share/eden/load/`.
-3. Optional: create `~/.local/share/eden/sdmc/SMOInterp/config.ini`:
+1. Right-click SMO in your emulator → **Properties → Add-ons** and **uncheck the Update**, so the game runs as 1.0.0. Back up your save first.
+2. Download the zip from [Releases](../../releases) and extract it into the emulator's `load` folder, so you end up with `load/0100000000010000/SMOInterp/exefs/`. The easiest way to find `load` is to right-click SMO → **Open Mod Data Location** and go up one folder. Or:
+
+   | Emulator | Linux | Windows |
+   |---|---|---|
+   | Eden | `~/.local/share/eden/load/` | `%APPDATA%\eden\load\` |
+   | yuzu | `~/.local/share/yuzu/load/` | `%APPDATA%\yuzu\load\` |
+   | yuzu (Flatpak) | `~/.var/app/org.yuzu_emu.yuzu/data/yuzu/load/` | |
+
+3. Check that **SMOInterp** is ticked in the Add-ons list, then start the game.
+4. Optional: create `SMOInterp/config.ini` in the emulator's `sdmc` folder, which sits next to `load` (for example `~/.local/share/yuzu/sdmc/SMOInterp/config.ini`):
 
    ```ini
    fps = 120            # your display's refresh rate

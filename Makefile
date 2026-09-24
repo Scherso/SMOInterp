@@ -28,10 +28,12 @@ ifeq ($(strip $(DEVKITPRO)),)
 # No devkitPro toolchain on this machine: rerun make inside the official devkitA64 container.
 # Mounted at /src, so exlaunch names its intermediate outputs src.*.
 CONTAINER := $(shell command -v podman || command -v docker)
+# Pinned so a toolchain update can't break the -Werror build unannounced. CI uses this too.
+IMAGE := docker.io/devkitpro/devkita64:20260219
 
 all clean:
 	@[ -n "$(CONTAINER)" ] || { echo "need podman or docker, or set DEVKITPRO" >&2; exit 1; }
-	@$(CONTAINER) run --rm -v "$(PWD)":/src:Z -w /src docker.io/devkitpro/devkita64 make -j$$(nproc) $@
+	@$(CONTAINER) run --rm -v "$(PWD)":/src:Z -w /src $(IMAGE) make -j$$(nproc) $@
 else
 include $(MK_PATH)/common.mk
 endif
