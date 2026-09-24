@@ -36,9 +36,12 @@ It's a code mod built with [exlaunch](https://github.com/shadowninja108/exlaunch
 ## Build
 
 ```sh
-./build.sh      # builds into deploy/ in the devkitA64 container (podman or docker)
-./package.sh    # makes the release zip
+make            # builds into deploy/
+make package    # makes the release zip
+make clean
 ```
+
+With `DEVKITPRO` set, this uses your local devkitA64. Without it, it runs inside the `devkitpro/devkita64` container (podman or docker).
 
 GitHub Actions builds every push. Pushing a `v*` tag publishes a release.
 
