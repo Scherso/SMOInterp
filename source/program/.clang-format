@@ -1,0 +1,22 @@
+# Style for the mod's own code. exlaunch (source/lib, nn, rtld) is left as upstream has it.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 120
+NamespaceIndentation: All
+AccessModifierOffset: -4
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Empty
+AlwaysBreakTemplateDeclarations: Yes
+SpaceAfterTemplateKeyword: false
+Cpp11BracedListStyle: false
+SpaceBeforeCpp11BracedList: true
+AlignConsecutiveAssignments: false
+AlignTrailingComments: true
+SortIncludes: Never
+ReflowComments: true
+FixNamespaceComments: false
+# exlaunch's hook macro opens a struct.
+Macros:
+  - HOOK_DEFINE_TRAMPOLINE(name)=struct name
