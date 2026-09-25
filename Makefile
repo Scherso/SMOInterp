@@ -17,7 +17,7 @@ MOD_NAME := SMOInterp
 VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 ZIP := $(PWD)/$(MOD_NAME)-$(VERSION).zip
 
-.PHONY: clean all package
+.PHONY: clean all package format
 
 EXL_CFLAGS   := $(C_FLAGS) -DEXL_LOAD_KIND=$(LOAD_KIND) -DEXL_LOAD_KIND_ENUM=$(LOAD_KIND_ENUM) -DEXL_PROGRAM_ID=0x$(PROGRAM_ID)
 EXL_CXXFLAGS := $(CXX_FLAGS)
@@ -46,3 +46,7 @@ package: all
 		cp $(OUT)/$(BINARY_NAME) $(OUT)/main.npdm "$$stage/$(PROGRAM_ID)/$(MOD_NAME)/exefs/" && \
 		cd "$$stage" && zip -qr $(ZIP) $(PROGRAM_ID)
 	@echo $(ZIP)
+
+# Formats the mod's own code (source/program/.clang-format); exlaunch is left alone.
+format:
+	@clang-format -i source/program/*.cpp source/program/*.hpp

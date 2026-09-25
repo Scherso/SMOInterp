@@ -83,7 +83,8 @@ namespace smo::config {
         if (!s_Loaded) {
             s_Loaded = true;
             Load();
-            Logging.Log("config: fps = %d, interpolation = %s", s_Settings.fps, s_Settings.interpolation ? "on" : "off");
+            Logging.Log("config: fps = %d, interpolation = %s", s_Settings.fps,
+                        s_Settings.interpolation ? "on" : "off");
         }
         return s_Settings;
     }

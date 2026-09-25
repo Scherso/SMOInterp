@@ -47,6 +47,7 @@ It's a code mod built with [exlaunch](https://github.com/shadowninja108/exlaunch
 make            # builds into deploy/
 make package    # makes the release zip
 make clean
+make format     # clang-format the mod's code in source/program
 ```
 
 With `DEVKITPRO` set, this uses your local devkitA64. Without it, it runs inside the `devkitpro/devkita64` container (podman or docker).

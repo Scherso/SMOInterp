@@ -19,8 +19,8 @@ namespace {
         const auto& main = exl::util::GetMainModuleInfo().m_Total;
         if (main.m_Size < smo::BuildIdOffset + sizeof(smo::BuildId))
             return false;
-        return std::memcmp(reinterpret_cast<const void*>(main.m_Start + smo::BuildIdOffset),
-                           smo::BuildId, sizeof(smo::BuildId)) == 0;
+        return std::memcmp(reinterpret_cast<const void*>(main.m_Start + smo::BuildIdOffset), smo::BuildId,
+                           sizeof(smo::BuildId)) == 0;
     }
 
     /* The Switch system tick runs at 19.2 MHz. */
@@ -60,7 +60,8 @@ namespace {
             s_Accumulator -= TicksPerLogicStep;
 
         /* Rendering runs one tick behind: blend from the previous tick to the newest by the leftover time. */
-        s_Alpha = smo::config::Get().interpolation ? std::min(float(s_Accumulator) / float(TicksPerLogicStep), 1.f) : 1.f;
+        float alpha = std::min(float(s_Accumulator) / float(TicksPerLogicStep), 1.f);
+        s_Alpha = smo::config::Get().interpolation ? alpha : 1.f;
     }
 
     u64 s_FrameCount = 0;
@@ -80,8 +81,7 @@ namespace {
         if (s_WindowStartTick != 0) {
             u64 fps10 = (s_FrameCount - s_WindowStartFrame) * TicksPerSecond * 10 / elapsed;
             u64 calc10 = (s_CalcCount - s_WindowStartCalc) * TicksPerSecond * 10 / elapsed;
-            Logging.Log("render %lu.%lu fps, logic %lu.%lu steps/s",
-                        fps10 / 10, fps10 % 10, calc10 / 10, calc10 % 10);
+            Logging.Log("render %lu.%lu fps, logic %lu.%lu steps/s", fps10 / 10, fps10 % 10, calc10 / 10, calc10 % 10);
         }
         s_WindowStartTick = now;
         s_WindowStartFrame = s_FrameCount;
@@ -160,7 +160,8 @@ HOOK_DEFINE_TRAMPOLINE(LiveActorKitPreDrawGraphics) {
 HOOK_DEFINE_TRAMPOLINE(EffectSystemPreprocess) {
     static void Callback(void* effectSystem) {
         auto* end = s_EffectSystems + s_EffectSystemCount;
-        if (s_RunCalcThisFrame && s_EffectSystemCount < MaxEffectSystems && std::find(s_EffectSystems, end, effectSystem) == end)
+        if (s_RunCalcThisFrame && s_EffectSystemCount < MaxEffectSystems &&
+            std::find(s_EffectSystems, end, effectSystem) == end)
             s_EffectSystems[s_EffectSystemCount++] = effectSystem;
         Orig(effectSystem);
     }
@@ -236,20 +237,21 @@ HOOK_DEFINE_TRAMPOLINE(SceneDtor) {
 };
 
 namespace {
-    /* al::Scene::movement minus updateNerve/control, keeping every render-side step paired with this frame's draw. */
+    /* al::Scene::movement minus updateNerve/control: every render-side step, paired with this frame's draw. */
     void RefreshSceneGraphics(void* scene) {
         void* kit = Field<void*>(scene, smo::fields::Scene_liveActorKit);
         if (kit == nullptr)
             return;
 
         void* graphics = Field<void*>(kit, smo::fields::LiveActorKit_graphicsSystemInfo);
-        void* occlusion = graphics ? Field<void*>(graphics, smo::fields::GraphicsSystemInfo_modelOcclusionCulling) : nullptr;
+        void* occlusion =
+            graphics ? Field<void*>(graphics, smo::fields::GraphicsSystemInfo_modelOcclusionCulling) : nullptr;
         void* displayLists = Field<void*>(kit, smo::fields::LiveActorKit_modelDisplayListController);
 
         MainFunc<ObjFn>(smo::offsets::incrementDrawBufferCounter)(kit);
         MainFunc<ObjFn>(smo::offsets::waitUpdateDrawBuffer)(kit);
 
-        /* The tick's effect update (updateKitListPost): swap vfx buffers, then advance each group by this frame's share. */
+        /* The tick's effect update (updateKitListPost): swap vfx buffers, advance each group by this frame's share. */
         for (size_t i = 0; i < s_EffectSystemCount; ++i)
             EffectSystemPreprocess::Orig(s_EffectSystems[i]);
         for (size_t i = 0; i < s_EffectGroupCallCount; ++i) {

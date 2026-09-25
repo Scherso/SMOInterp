@@ -32,11 +32,13 @@ namespace smo::camera {
         constexpr size_t CameraStateSize = 0x5c - CameraStateBegin;
 
         /* A jump bigger than this between ticks is a cut (warp, cutscene edit), not motion. */
-        constexpr float CutDistance = 1000.f;           /* world units (cm) */
-        constexpr float CutMinDirectionDot = 0.866f;    /* ~30 degrees of turn in one tick */
+        constexpr float CutDistance = 1000.f;        /* world units (cm) */
+        constexpr float CutMinDirectionDot = 0.866f; /* ~30 degrees of turn in one tick */
 
-        /* al::Projection wraps a sead::PerspectiveProjection (near/far/fovy/aspect at 0x98/0x9c/0xa0/0xb0)
-         * plus derived frustum values and matrices; setProj + calcMtx rebuild all of it. */
+        /*
+         * al::Projection wraps a sead::PerspectiveProjection (near/far/fovy/aspect at 0x98/0x9c/0xa0/0xb0)
+         * plus derived frustum values and matrices; setProj + calcMtx rebuild all of it.
+         */
         constexpr ptrdiff_t ProjNear = 0x98;
         constexpr ptrdiff_t ProjFar = 0x9c;
         constexpr ptrdiff_t ProjFovy = 0xa0;
@@ -82,8 +84,10 @@ namespace smo::camera {
             return dirA.Dot(dirB) < CutMinDirectionDot;
         }
 
-        /* al::SceneCameraInfo { s32 viewNumMax; CameraViewInfo** views; },
-         * al::CameraViewInfo { s32 index; bool isValid; ...; const sead::LookAtCamera& lookAtCam @ 0x8 }. */
+        /*
+         * al::SceneCameraInfo { s32 viewNumMax; CameraViewInfo** views; },
+         * al::CameraViewInfo { s32 index; bool isValid; ...; const sead::LookAtCamera& lookAtCam @ 0x8 }.
+         */
         template<typename Fn>
         void ForEachView(const void* sceneCameraInfo, Fn fn) {
             if (sceneCameraInfo == nullptr)
@@ -143,9 +147,9 @@ namespace smo::camera {
                     slot.projectionSaved = true;
                 }
                 float fovy = slot.prev.fovy + (slot.curr.fovy - slot.prev.fovy) * alpha;
-                MainFunc<SetProjFn>(smo::offsets::Projection_setProj)(
-                    projection, Field<float>(projection, ProjNear), Field<float>(projection, ProjFar), fovy,
-                    Field<float>(projection, ProjAspect));
+                MainFunc<SetProjFn>(smo::offsets::Projection_setProj)(projection, Field<float>(projection, ProjNear),
+                                                                      Field<float>(projection, ProjFar), fovy,
+                                                                      Field<float>(projection, ProjAspect));
                 MainFunc<CalcMtxFn>(smo::offsets::Projection_calcMtx)(projection);
             }
         });

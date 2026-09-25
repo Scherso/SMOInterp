@@ -55,9 +55,7 @@ namespace smo::nvn {
     }
 
     HOOK_DEFINE_TRAMPOLINE(BootstrapLoader) {
-        static ProcFn Callback(const char* name) {
-            return Intercept(name, Orig(name));
-        }
+        static ProcFn Callback(const char* name) { return Intercept(name, Orig(name)); }
     };
 
     int PresentInterval() {

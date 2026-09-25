@@ -1,7 +1,8 @@
 #pragma once
 
 /*
- * Settings read once from sd:/SMOInterp/config.ini (in Eden: ~/.local/share/eden/sdmc/SMOInterp/config.ini):
+ * Settings read once from sd:/SMOInterp/config.ini, i.e. the emulator's sdmc folder
+ * (e.g. ~/.local/share/yuzu/sdmc/SMOInterp/config.ini):
  *
  *   fps = 120            # match the display's refresh rate
  *   interpolation = on   # off: show each logic tick as-is (no blending, no added latency)
