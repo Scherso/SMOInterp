@@ -2,6 +2,16 @@
 
 #include "lib.hpp"
 
+#include <atomic>
+
+/* Logs the first time a fixed-size limit is hit, which otherwise fails silently (unblended or unreplayed objects). */
+#define SMO_WARN_ONCE(...)                                                                                             \
+    do {                                                                                                               \
+        static std::atomic<bool> s_Warned { false };                                                                   \
+        if (!s_Warned.exchange(true, std::memory_order_relaxed))                                                       \
+            Logging.Log(__VA_ARGS__);                                                                                  \
+    } while (0)
+
 /* SMO 1.0.0 (main build ID 3CA12DFAAF9C82DA064D1698DF79CDA1). Offsets from OdysseyDecomp data/file_list.yml. */
 namespace smo {
     /* Payload of main's GNU build-id note, which is mapped in memory at BuildIdOffset. */

@@ -93,7 +93,11 @@ The scene pointer is captured during each logic tick and cleared from a hook on 
 
 ## Interpolation
 
-Rendering runs one logic tick (16.7 ms) behind, and each frame shows the state `alpha` of the way from the previous tick to the newest one, where `alpha` is the accumulator's leftover time. On a 120 Hz display that gives two frames per tick, at `alpha ≈ 0` and `≈ 0.5`. The game itself never sees a blended value: everything is written just before the renderer reads it and restored afterwards.
+Rendering runs one logic tick (16.7 ms) behind, and each frame shows the state `alpha` of the way from the previous tick to the newest one, where `alpha` is the accumulator's leftover time. On a 120 Hz display that gives two frames per tick, at `alpha ≈ 0` and `≈ 0.5`. 
+
+With `interpolation = extrapolate`, `alpha` runs from 1 to 2 instead, so each frame continues the last step's motion past the newest tick: `curr + (curr - prev) × leftover`. That removes the tick of latency, at the cost of overshooting for a frame when motion changes suddenly (stopping, landing, hitting a wall). The snap rules below apply the same way: a cut or teleport shows the newest tick as-is.
+
+The game itself never sees a blended value: everything is written just before the renderer reads it and restored afterwards.
 
 | What | Where it's blended | Snaps (no blend) when |
 |---|---|---|

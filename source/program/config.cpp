@@ -39,6 +39,25 @@ namespace smo::config {
             return fallback;
         }
 
+        Settings::Smoothing ParseSmoothing(const char* value, Settings::Smoothing fallback) {
+            if (!std::strcmp(value, "extrapolate"))
+                return Settings::Smoothing::Extrapolate;
+            bool on = ParseBool(value, fallback != Settings::Smoothing::Off);
+            return on ? Settings::Smoothing::Interpolate : Settings::Smoothing::Off;
+        }
+
+        const char* SmoothingName(Settings::Smoothing smoothing) {
+            switch (smoothing) {
+            case Settings::Smoothing::Off:
+                return "off";
+            case Settings::Smoothing::Interpolate:
+                return "on";
+            case Settings::Smoothing::Extrapolate:
+                return "extrapolate";
+            }
+            return "?";
+        }
+
         void Parse(char* text) {
             for (char* line = std::strtok(text, "\r\n"); line != nullptr; line = std::strtok(nullptr, "\r\n")) {
                 if (char* comment = std::strchr(line, '#'))
@@ -53,7 +72,7 @@ namespace smo::config {
                 if (!std::strcmp(key, "fps"))
                     s_Settings.fps = std::clamp(std::atoi(value), MinFps, MaxFps);
                 else if (!std::strcmp(key, "interpolation"))
-                    s_Settings.interpolation = ParseBool(value, s_Settings.interpolation);
+                    s_Settings.smoothing = ParseSmoothing(value, s_Settings.smoothing);
             }
         }
 
@@ -83,8 +102,7 @@ namespace smo::config {
         if (!s_Loaded) {
             s_Loaded = true;
             Load();
-            Logging.Log("config: fps = %d, interpolation = %s", s_Settings.fps,
-                        s_Settings.interpolation ? "on" : "off");
+            Logging.Log("config: fps = %d, interpolation = %s", s_Settings.fps, SmoothingName(s_Settings.smoothing));
         }
         return s_Settings;
     }

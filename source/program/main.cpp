@@ -32,12 +32,16 @@ namespace {
     /*
      * Fixed-timestep accumulator. Each rendered frame adds its real elapsed time; the game tick
      * (GameSystem::movement) only runs when a whole logic step has accumulated. The leftover
-     * fraction (s_Alpha) is how far the display is between the last two logic states.
+     * fraction is how far the display has moved on from the newest logic state.
      */
     u64 s_LastFrameTick = 0;
     u64 s_Accumulator = 0;
     bool s_RunCalcThisFrame = true;
-    /* How far the displayed state is from the previous tick towards the newest one, in [0, 1]. */
+    /*
+     * The blend weight from the previous tick (0) to the newest (1) that every hook draws with.
+     * Interpolation uses [0, 1], one tick behind; extrapolation uses [1, 2], continuing past the
+     * newest tick along its last step, so nothing lags.
+     */
     float s_Alpha = 1.f;
     /* This frame's real duration in ticks (~0.5 at 120 Hz); effects advance by this much per frame. */
     float s_FrameTicks = 1.f;
@@ -59,9 +63,19 @@ namespace {
         if (s_RunCalcThisFrame)
             s_Accumulator -= TicksPerLogicStep;
 
-        /* Rendering runs one tick behind: blend from the previous tick to the newest by the leftover time. */
-        float alpha = std::min(float(s_Accumulator) / float(TicksPerLogicStep), 1.f);
-        s_Alpha = smo::config::Get().interpolation ? alpha : 1.f;
+        /* Interpolation runs one tick behind (prev -> curr); extrapolation runs level with the game (curr -> next). */
+        float leftover = std::min(float(s_Accumulator) / float(TicksPerLogicStep), 1.f);
+        switch (smo::config::Get().smoothing) {
+        case smo::config::Settings::Smoothing::Off:
+            s_Alpha = 1.f;
+            break;
+        case smo::config::Settings::Smoothing::Interpolate:
+            s_Alpha = leftover;
+            break;
+        case smo::config::Settings::Smoothing::Extrapolate:
+            s_Alpha = 1.f + leftover;
+            break;
+        }
     }
 
     u64 s_FrameCount = 0;
@@ -160,17 +174,24 @@ HOOK_DEFINE_TRAMPOLINE(LiveActorKitPreDrawGraphics) {
 HOOK_DEFINE_TRAMPOLINE(EffectSystemPreprocess) {
     static void Callback(void* effectSystem) {
         auto* end = s_EffectSystems + s_EffectSystemCount;
-        if (s_RunCalcThisFrame && s_EffectSystemCount < MaxEffectSystems &&
-            std::find(s_EffectSystems, end, effectSystem) == end)
-            s_EffectSystems[s_EffectSystemCount++] = effectSystem;
+        if (s_RunCalcThisFrame && std::find(s_EffectSystems, end, effectSystem) == end) {
+            if (s_EffectSystemCount < MaxEffectSystems)
+                s_EffectSystems[s_EffectSystemCount++] = effectSystem;
+            else
+                SMO_WARN_ONCE("limit: more than %zu effect systems in a tick", MaxEffectSystems);
+        }
         Orig(effectSystem);
     }
 };
 
 HOOK_DEFINE_TRAMPOLINE(VfxSystemCalculateGroup) {
     static void Callback(void* system, int group, float rate, int swapMode) {
-        if (s_RunCalcThisFrame && s_EffectGroupCallCount < MaxEffectGroupCalls)
-            s_EffectGroupCalls[s_EffectGroupCallCount++] = { system, group, rate, swapMode };
+        if (s_RunCalcThisFrame) {
+            if (s_EffectGroupCallCount < MaxEffectGroupCalls)
+                s_EffectGroupCalls[s_EffectGroupCallCount++] = { system, group, rate, swapMode };
+            else
+                SMO_WARN_ONCE("limit: more than %zu effect group calls in a tick", MaxEffectGroupCalls);
+        }
         Orig(system, group, rate * s_FrameTicks, swapMode);
     }
 };

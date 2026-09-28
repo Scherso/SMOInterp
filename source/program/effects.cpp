@@ -13,7 +13,8 @@ namespace smo::effects {
          * scale-free RT copy at 0xa0, each four float4 rows, translation in the last row.
          */
         constexpr ptrdiff_t PlacementBegin = 0x60;
-        constexpr size_t PlacementFloats = 32;
+        constexpr size_t PlacementFloats = 2 * 4 * 4;
+        /* Set by SetMatrix/SetPos; tells the set's emitters to rebuild their matrices from the placement. */
         constexpr ptrdiff_t MatrixDirty = 0x18;
 
         struct Entry {
@@ -36,8 +37,10 @@ namespace smo::effects {
 
     ScopedBlend::ScopedBlend(void* emitterSet, float alpha) {
         Entry* e = s_Table.Find(emitterSet, true);
-        if (e == nullptr)
+        if (e == nullptr) {
+            SMO_WARN_ONCE("limit: emitter set table full");
             return;
+        }
 
         float* placement = &Field<float>(emitterSet, PlacementBegin);
         u32 tick = s_Tick.load(std::memory_order_acquire);

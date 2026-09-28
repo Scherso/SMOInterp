@@ -10,11 +10,17 @@
  * looked up by the object's address from the engine's worker threads, and blend between them.
  */
 namespace smo::history {
-    /* A transform (4x3 or 4x4 floats) has its translation at floats 12..14. */
-    constexpr size_t TranslationOffset = 12;
+    /* A transform stored as four float4s (columns or rows) has its translation in the fourth. */
+    constexpr size_t TranslationOffset = 3 * 4;
 
-    /* Moving further than this in one tick is a warp, not motion. */
-    constexpr float TeleportDistance = 1000.f; /* world units (cm) */
+    /* SMO's world units are centimetres. */
+    constexpr float UnitsPerMetre = 100.f;
+
+    /*
+     * Moving further than this in one tick is a warp, not motion, so it snaps instead of blending.
+     * 10 m in 1/60 s is 600 m/s, far above normal movement. The exact value is a judgement call.
+     */
+    constexpr float TeleportDistance = 10.f * UnitsPerMetre;
 
     inline bool IsTeleport(const float* prev, const float* curr) {
         float dx = curr[TranslationOffset + 0] - prev[TranslationOffset + 0];
@@ -69,6 +75,10 @@ namespace smo::history {
     private:
         static constexpr size_t MaxProbe = 64;
 
+        /*
+         * MurmurHash3's 64-bit finalizer. Objects are aligned, so their addresses share low bits;
+         * mixing makes the low bits used as the table index depend on the whole address.
+         */
         static size_t Hash(uintptr_t key) {
             key ^= key >> 33;
             key *= 0xff51afd7ed558ccdull;

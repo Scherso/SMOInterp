@@ -36,10 +36,15 @@ It's a code mod built with [exlaunch](https://github.com/shadowninja108/exlaunch
 
    ```ini
    fps = 120            # your display's refresh rate
-   interpolation = on   # off = no blending, for comparison
+   interpolation = on   # on, extrapolate, or off (see below)
    ```
 
    Without the file, it runs at 120 fps with interpolation on. Restart the game after editing it.
+
+   `interpolation` picks how the extra frames are made:
+   - `on` blends the last two game steps. It's the smoothest, but the picture runs up to one step (16.7 ms) behind.
+   - `extrapolate` continues each motion past the newest step instead, so there's no added delay. When something stops or turns suddenly, it can overshoot for a frame.
+   - `off` shows each game step as it is, so motion looks like 60 fps. Use it for comparison.
 
 ## Build
 
@@ -56,7 +61,7 @@ GitHub Actions builds every push. Pushing a `v*` tag publishes a release.
 
 ## Known limits
 
-- Button presses still register at 60 Hz, and the picture runs one logic step (16.7 ms) behind.
+- Button presses still register at 60 Hz. With `interpolation = on` the picture runs up to one logic step (16.7 ms) behind; `extrapolate` avoids that but can overshoot for a frame.
 - HUD animations still step at 60 Hz.
 - Not yet tested: bosses, Odyssey warps, snapshot mode, 2-player mode, moon cutscenes.
 

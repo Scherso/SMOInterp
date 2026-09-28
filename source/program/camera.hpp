@@ -10,7 +10,7 @@ namespace smo::camera {
     /* Record the camera the simulation just produced as the newest tick. */
     void Capture(const void* sceneCameraInfo);
 
-    /* Write prev + (curr - prev) * alpha into every tracked view. */
+    /* Write prev + (curr - prev) * alpha into every tracked view; alpha > 1 extrapolates. */
     void Apply(const void* sceneCameraInfo, float alpha);
 
     /* Undo Apply, restoring the simulation's own camera values. */

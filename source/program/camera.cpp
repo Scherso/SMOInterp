@@ -1,9 +1,12 @@
 #include "camera.hpp"
 
+#include "history.hpp"
 #include "smo.hpp"
 
 #include <cmath>
+#include <cstddef>
 #include <cstring>
+#include <numbers>
 
 namespace smo::camera {
     namespace {
@@ -24,25 +27,54 @@ namespace smo::camera {
             }
         };
 
-        /* sead::LookAtCamera: vtable, Matrix34f view matrix, then pos / at / up (see doUpdateMatrix). */
-        constexpr ptrdiff_t CameraStateBegin = 0x08;
-        constexpr ptrdiff_t CameraPos = 0x38;
-        constexpr ptrdiff_t CameraAt = 0x44;
-        constexpr ptrdiff_t CameraUp = 0x50;
-        constexpr size_t CameraStateSize = 0x5c - CameraStateBegin;
+        /*
+         * Layout of sead::LookAtCamera, from sead's headers: sead::Camera's vtable and view matrix
+         * (a Matrix34f, 3x4 floats), then the pos / at / up vectors doUpdateMatrix builds it from.
+         * The asserts pin it to the offsets doUpdateMatrix reads in SMO 1.0.0.
+         */
+        struct LookAtCamera {
+            void* vtable;
+            float matrix[3][4];
+            Vec3 pos, at, up;
+        };
+        static_assert(offsetof(LookAtCamera, matrix) == 0x08);
+        static_assert(offsetof(LookAtCamera, pos) == 0x38);
+        static_assert(offsetof(LookAtCamera, at) == 0x44);
+        static_assert(offsetof(LookAtCamera, up) == 0x50);
 
-        /* A jump bigger than this between ticks is a cut (warp, cutscene edit), not motion. */
-        constexpr float CutDistance = 1000.f;        /* world units (cm) */
-        constexpr float CutMinDirectionDot = 0.866f; /* ~30 degrees of turn in one tick */
+        constexpr ptrdiff_t CameraPos = offsetof(LookAtCamera, pos);
+        constexpr ptrdiff_t CameraAt = offsetof(LookAtCamera, at);
+        constexpr ptrdiff_t CameraUp = offsetof(LookAtCamera, up);
+        /* Everything Apply overwrites and Restore puts back: the view matrix through up. */
+        constexpr ptrdiff_t CameraStateBegin = offsetof(LookAtCamera, matrix);
+        constexpr size_t CameraStateSize = offsetof(LookAtCamera, up) + sizeof(Vec3) - CameraStateBegin;
 
         /*
-         * al::Projection wraps a sead::PerspectiveProjection (near/far/fovy/aspect at 0x98/0x9c/0xa0/0xb0)
-         * plus derived frustum values and matrices; setProj + calcMtx rebuild all of it.
+         * A change bigger than either of these between ticks is a cut (warp, cutscene edit), not
+         * motion, so the camera snaps instead of blending. Turning 30 degrees in 1/60 s is 1800
+         * degrees per second, far faster than the player can turn the camera.
          */
-        constexpr ptrdiff_t ProjNear = 0x98;
-        constexpr ptrdiff_t ProjFar = 0x9c;
-        constexpr ptrdiff_t ProjFovy = 0xa0;
-        constexpr ptrdiff_t ProjAspect = 0xb0;
+        constexpr float CutDistance = history::TeleportDistance;
+        constexpr float CutMaxTurnDegrees = 30.f;
+        /* The dot product of two unit directions is the cosine of the angle between them. */
+        constexpr float CutMinDirectionDot = __builtin_cosf(CutMaxTurnDegrees * std::numbers::pi_v<float> / 180.f);
+
+        /*
+         * al::Projection embeds a sead::PerspectiveProjection whose parameters start at 0x98 (as
+         * al::Projection::setProj writes them). Their order is sead's: near, far, fovy, the fovy's
+         * cached sin / cos / tan, then aspect. The rest of al::Projection is derived frustum values
+         * and matrices, which setProj + calcMtx rebuild.
+         */
+        struct PerspectiveParams {
+            float near, far, fovy, fovySin, fovyCos, fovyTan, aspect;
+        };
+        constexpr ptrdiff_t ProjParams = 0x98;
+        constexpr ptrdiff_t ProjNear = ProjParams + offsetof(PerspectiveParams, near);
+        constexpr ptrdiff_t ProjFar = ProjParams + offsetof(PerspectiveParams, far);
+        constexpr ptrdiff_t ProjFovy = ProjParams + offsetof(PerspectiveParams, fovy);
+        constexpr ptrdiff_t ProjAspect = ProjParams + offsetof(PerspectiveParams, aspect);
+        static_assert(ProjAspect == 0xb0);
+        /* sizeof(al::Projection), so the whole object can be saved and restored. */
         constexpr size_t ProjectionSize = 0x1f0;
 
         constexpr int MaxViews = 4;

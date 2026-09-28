@@ -9,11 +9,12 @@
 namespace smo::actors {
     namespace {
         /* One bone world matrix: nn::util MatrixColumnMajor4x3, stored as four float4 columns. */
-        constexpr size_t FloatsPerBone = 16;
+        constexpr size_t FloatsPerBone = 4 * 4;
 
         /* Per skeleton: prev and curr tick snapshots, plus the matrices to restore after upload. */
         constexpr size_t BuffersPerEntry = 3;
-        constexpr size_t ArenaFloats = 4 * 1024 * 1024; /* 16 MiB, ~87k bones */
+        /* 16 MiB. At 48 floats (3 buffers) per bone that is ~87k bones across all loaded models. */
+        constexpr size_t ArenaFloats = 16 * 1024 * 1024 / sizeof(float);
 
         struct Entry {
             std::atomic<uintptr_t> key;
@@ -34,8 +35,10 @@ namespace smo::actors {
 
         float* Allocate(size_t floats) {
             size_t offset = s_ArenaUsed.fetch_add(floats, std::memory_order_relaxed);
-            if (offset + floats > ArenaFloats)
+            if (offset + floats > ArenaFloats) {
+                SMO_WARN_ONCE("limit: bone arena full (%zu floats)", ArenaFloats);
                 return nullptr;
+            }
             return &s_Arena[offset];
         }
 
@@ -85,8 +88,10 @@ namespace smo::actors {
             return;
 
         Entry* e = s_Table.Find(skeleton, true);
-        if (e == nullptr)
+        if (e == nullptr) {
+            SMO_WARN_ONCE("limit: skeleton table full");
             return;
+        }
 
         u32 tick = s_Tick.load(std::memory_order_acquire);
         Record(*e, world, bones, tick);
