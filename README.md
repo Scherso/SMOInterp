@@ -55,11 +55,11 @@ make clean
 make format     # clang-format the mod's code in source/program
 ```
 
-With `DEVKITPRO` set, this uses your local devkitA64. Without it, it runs inside the `devkitpro/devkita64` container (podman or docker).
+With `DEVKITPRO` set, this uses your local devkitA64. Without it, it runs inside the `devkitpro/devkita64` container.
 
 GitHub Actions builds every push. Pushing a `v*` tag publishes a release.
 
-## Known limits
+## TODO / Known Issues
 
 - Button presses still register at 60 Hz. With `interpolation = on` the picture runs up to one logic step (16.7 ms) behind; `extrapolate` avoids that but can overshoot for a frame.
 - HUD animations still step at 60 Hz.
