@@ -55,15 +55,76 @@ make clean
 make format     # clang-format the mod's code in source/program
 ```
 
-With `DEVKITPRO` set, this uses your local devkitA64. Without it, it runs inside the `devkitpro/devkita64` container.
+With `DEVKITPRO` set, this uses your local devkitA64. Without it, it runs inside the `devkitpro/devkita64` container (podman or docker).
 
 GitHub Actions builds every push. Pushing a `v*` tag publishes a release.
 
-## TODO / Known Issues
+## Known Bugs / TODO
 
-- Button presses still register at 60 Hz. With `interpolation = on` the picture runs up to one logic step (16.7 ms) behind; `extrapolate` avoids that but can overshoot for a frame.
-- HUD animations still step at 60 Hz.
-- Not yet tested: bosses, Odyssey warps, snapshot mode, 2-player mode, moon cutscenes.
+- Button presses still register at 60 Hz. With `interpolation = on` the picture runs up to one logic step (16.7 ms) behind; `extrapolate` avoids that but has the possibility of overshooting for a frame.
+- HUD isn't interpolated. I don't think this matters that much. If someone wants to pr and make it work go for it. 
+
+## How it works
+
+SMOInterp doesn't change any bytes in the game's files. The emulator loads it as an extra code module (`subsdk9`) next to the game, and it patches the game **in memory** when the game starts.
+
+### 1. Checking the game version
+
+Every address below belongs to SMO 1.0.0 only. Before touching anything, the mod reads the build ID that is mapped in memory at `main+0x1c4d024` and compares it with 1.0.0's:
+
+```
+3C A1 2D FA AF 9C 82 DA 06 4D 16 98 DF 79 CD A1
+```
+
+If it doesn't match, it logs `main is not SMO 1.0.0` and installs nothing. Hooking the wrong build would overwrite random code.
+
+### 2. Hooking a function
+
+For each function it needs, [exlaunch](https://github.com/shadowninja108/exlaunch) overwrites the function's **first instruction** with a branch to the mod's code. The instruction it replaced is copied into a small trampoline, so the mod can still call the original function.
+
+```
+main+0x536614   GameSystem::movement           (the game's 60 Hz tick)
+
+  before:   <first instruction>                ; the game's own code
+            ...
+
+  after:    14xxxxxx   b   GameSystemMovement::Callback   ; SMOInterp
+            ...
+
+  trampoline (inside SMOInterp):
+            <first instruction>                ; relocated original
+            b   main+0x536618                  ; continue into the real function
+```
+
+When the mod's code is further than a single `b` can reach (±128 MB), exlaunch writes `58000051 LDR X17, #8` / `d61f0220 BR X17` followed by the 64-bit address instead.
+
+The callback then decides what happens. For `GameSystem::movement`, it calls the original (`Orig(...)`) only when 1/60 s of real time has passed. On the frames in between, it skips the tick and repeats only the rendering work.
+
+### 3. What each hook does
+
+All addresses are offsets from the start of the game's `main` executable, taken from [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp)'s `data/file_list.yml`.
+
+| Address | Function | What SMOInterp does |
+|---|---|---|
+| `0x8a6ab4` | `al::GameFrameworkNx::procFrame_` | Measures real time each frame and decides whether a 60 Hz game step is due. |
+| `0x536614` | `GameSystem::movement` | Runs the real game step only when it's due. Otherwise repeats the scene's rendering work without the simulation. |
+| `0x75b9a0` | `sead::ControllerMgr::calc` | Polls controllers only on game steps, so button presses aren't lost. |
+| `0x8c23fc` | `PrePassLightKeeper::execute` | Skipped on in-between frames, so lights don't overflow their buffer and go dark. |
+| `0x9d0ce4` | `al::updateKitListPostOnNerveEnd` | Remembers which scene to redraw on in-between frames. |
+| `0x910650` | `al::LiveActorKit::preDrawGraphics` | Records each step's camera and writes the blended camera before the renderer copies it. |
+| `0x93fe7c` | `al::ModelCtrl::updateModelDrawBuffer` | Blends every model's bone matrices around the GPU upload, then restores the real ones. |
+| `0x93fbc0` | `al::ModelCtrl::updateGpuBuffer` | Same, for the other upload path. |
+| `0xb2b274` | `nn::vfx::EmitterSet::Calculate` | Blends where each particle effect is anchored. |
+| `0xb2a928` | `nn::vfx::EmitterSet::Initialize` | Forgets the history of a recycled effect slot. |
+| `0x887454` | `al::EffectSystem::preprocess` | Recorded on game steps and repeated on in-between frames. |
+| `0xb38fd4` | `nn::vfx::System::Calculate` | Advances particles by each frame's share of a step instead of a whole step. |
+| `0x8799b4` | `GraphicsSystemInfo::updatePartsGraphics` | Same for water, sky and clouds, which would otherwise animate at double speed. |
+| `0x899510` | `FluidSimulateWave::update` | Water ripples only step on game steps. |
+| `0x9ce52c` | `al::Scene::~Scene` | Clears all saved history when a scene is unloaded. |
+
+One more hook sets the frame rate. SMO looks up its graphics (NVN) functions by name at runtime, so the mod hooks that lookup (`nvnBootstrapLoader`) and swaps `nvnWindowSetPresentInterval` / `nvnWindowBuilderSetPresentInterval` for versions that ask Eden for your `fps` instead of 60.
+
+The blending never changes the game's own state. Every blended value is written just before the renderer reads it and put back straight afterwards, so the simulation only ever sees its real values. For the full story, including every approach that didn't work and why, see [docs/internals.md](docs/internals.md).
 
 ## Credits
 
