@@ -59,7 +59,7 @@ namespace smo::nvn {
     };
 
     int PresentInterval() {
-        return (config::Get().fps * 5 + 1) / 3;
+        return PresentIntervalFor(config::Get().fps);
     }
 
     void InstallHooks() {

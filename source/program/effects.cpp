@@ -8,26 +8,24 @@
 
 namespace smo::effects {
     namespace {
-        /*
-         * nn::vfx::EmitterSet placement (from SetMatrix/SetPos): the SRT matrix at 0x60 and its
-         * scale-free RT copy at 0xa0, each four float4 rows, translation in the last row.
-         */
-        constexpr ptrdiff_t PlacementBegin = 0x60;
-        constexpr size_t PlacementFloats = 2 * 4 * 4;
-        /* Set by SetMatrix/SetPos; tells the set's emitters to rebuild their matrices from the placement. */
-        constexpr ptrdiff_t MatrixDirty = 0x18;
+        /* The placement is two transforms (see smo::fields::EmitterSet_placement). */
+        constexpr ptrdiff_t PlacementBegin = smo::fields::EmitterSet_placement;
+        constexpr size_t PlacementFloats = 2 * history::TransformFloats;
+        constexpr ptrdiff_t MatrixDirty = smo::fields::EmitterSet_matrixDirty;
+    }
 
-        struct Entry {
-            std::atomic<uintptr_t> key;
-            u32 tick;
-            bool hasPrev;
-            float prev[PlacementFloats];
-            float curr[PlacementFloats];
-            float saved[PlacementFloats];
-            u32 savedDirty;
-        };
+    struct Entry {
+        std::atomic<uintptr_t> key;
+        u32 tick;
+        bool hasPrev;
+        float prev[PlacementFloats];
+        float curr[PlacementFloats];
+        float saved[PlacementFloats];
+        u32 savedDirty;
+    };
 
-        history::PointerTable<Entry, 1 << 13> s_Table;
+    namespace {
+        history::PointerTable<Entry, tuning::EmitterSetTableSize> s_Table;
         std::atomic<u32> s_Tick { 1 };
     }
 
@@ -53,7 +51,8 @@ namespace smo::effects {
             e->hasPrev = continuous && !history::IsTeleport(e->prev, e->curr);
             e->tick = tick;
         }
-        if (!e->hasPrev)
+        /* Weight 1 is the newest tick, which is what the set already holds: nothing to blend or restore. */
+        if (!e->hasPrev || alpha == 1.f)
             return;
 
         std::memcpy(e->saved, placement, sizeof(e->saved));
@@ -69,7 +68,7 @@ namespace smo::effects {
     ScopedBlend::~ScopedBlend() {
         if (m_Entry == nullptr)
             return;
-        auto* e = static_cast<Entry*>(m_Entry);
+        Entry* e = m_Entry;
         std::memcpy(&Field<float>(m_Set, PlacementBegin), e->saved, sizeof(e->saved));
         Field<u32>(m_Set, MatrixDirty) = e->savedDirty;
     }

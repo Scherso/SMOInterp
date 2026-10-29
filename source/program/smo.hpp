@@ -20,10 +20,15 @@ namespace smo {
         0x3c, 0xa1, 0x2d, 0xfa, 0xaf, 0x9c, 0x82, 0xda, 0x06, 0x4d, 0x16, 0x98, 0xdf, 0x79, 0xcd, 0xa1,
     };
 
-    /* A field of a game object, by byte offset. */
+    /* A field of a game object, by byte offset. Writable only through a non-const object pointer. */
     template<typename T>
-    T& Field(const void* object, ptrdiff_t offset) {
+    T& Field(void* object, ptrdiff_t offset) {
         return *reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(object) + offset);
+    }
+
+    template<typename T>
+    const T& Field(const void* object, ptrdiff_t offset) {
+        return *reinterpret_cast<const T*>(reinterpret_cast<uintptr_t>(object) + offset);
     }
 
     /* A function in main, by .text offset. */
@@ -142,6 +147,29 @@ namespace smo::fields {
     constexpr ptrdiff_t CameraViewInfo_isValid = 0x4;
     constexpr ptrdiff_t CameraViewInfo_lookAtCam = 0x8;
     constexpr ptrdiff_t CameraViewInfo_projection = 0x10;
+
+    /* sead::LookAtCamera (from doUpdateMatrix): vtable, Matrix34f view matrix, then pos / at / up. */
+    constexpr ptrdiff_t LookAtCamera_matrix = 0x08;
+    constexpr ptrdiff_t LookAtCamera_pos = 0x38;
+    constexpr ptrdiff_t LookAtCamera_at = 0x44;
+    constexpr ptrdiff_t LookAtCamera_up = 0x50;
+
+    /*
+     * al::Projection: sead::PerspectiveProjection's parameters (near, far, fovy, the fovy's cached
+     * sin / cos / tan, then aspect) start at 0x98, as al::Projection::setProj writes them. The whole
+     * object is 0x1f0 bytes (OdysseyDecomp's Projection.h ends with mOffset at 0x1e4..0x1ec).
+     */
+    constexpr ptrdiff_t Projection_perspectiveParams = 0x98;
+    constexpr ptrdiff_t Projection_aspect = 0xb0;
+    constexpr size_t Projection_size = 0x1f0;
+
+    /*
+     * nn::vfx::EmitterSet (from SetMatrix/SetPos): the placement is the SRT matrix at 0x60 and its
+     * scale-free RT copy at 0xa0, each four float4s with the translation last. The flag at 0x18,
+     * set by both, tells the set's emitters to rebuild their matrices from the placement.
+     */
+    constexpr ptrdiff_t EmitterSet_placement = 0x60;
+    constexpr ptrdiff_t EmitterSet_matrixDirty = 0x18;
 
     /* al::ModelCtrl -> nn::g3d::ModelObj -> nn::g3d::SkeletonObj (from ModelCtrl::calc, CalculateWorldImpl). */
     constexpr ptrdiff_t ModelCtrl_modelObj = 0x0;

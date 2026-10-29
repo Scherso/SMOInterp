@@ -12,6 +12,9 @@
 namespace smo::effects {
     void BeginTick();
 
+    /* Per-emitter-set history, defined in effects.cpp. */
+    struct Entry;
+
     /* Wraps one emitter set's calculation. Thread-safe across different sets. */
     struct ScopedBlend {
         ScopedBlend(void* emitterSet, float alpha);
@@ -22,7 +25,7 @@ namespace smo::effects {
 
     private:
         void* m_Set = nullptr;
-        void* m_Entry = nullptr;
+        Entry* m_Entry = nullptr;
     };
 
     /* The vfx system reuses emitter set slots; a reinitialized set must not blend from its old effect. */

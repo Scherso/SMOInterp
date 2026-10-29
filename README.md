@@ -36,15 +36,32 @@ It's a code mod built with [exlaunch](https://github.com/shadowninja108/exlaunch
 
    ```ini
    fps = 120            # your display's refresh rate
-   interpolation = on   # on, extrapolate, or off (see below)
+   interpolation = on   # on, camera, extrapolate, or off (see below)
    ```
 
    Without the file, it runs at 120 fps with interpolation on. Restart the game after editing it.
 
-   `interpolation` picks how the extra frames are made:
-   - `on` blends the last two game steps. It's the smoothest, but the picture runs up to one step (16.7 ms) behind.
-   - `extrapolate` continues each motion past the newest step instead, so there's no added delay. When something stops or turns suddenly, it can overshoot for a frame.
+   `interpolation` is a preset for how the extra frames are made:
+   - `on` blends the last two game steps for everything. It's the smoothest, but the picture runs up to one step (16.7 ms) behind.
+   - `camera` predicts only the camera ahead of the newest step and blends everything else. The camera responds without the delay, while models and effects stay exactly as smooth as `on`.
+   - `extrapolate` (experimental) predicts everything ahead of the newest step: no delay, but things can overshoot for a frame when they stop or turn suddenly.
    - `off` shows each game step as it is, so motion looks like 60 fps. Use it for comparison.
+
+   **Advanced options.** These override the preset, wherever they appear in the file:
+
+   ```ini
+   camera = interpolate        # interpolate, extrapolate or off, per system
+   models = interpolate
+   effects = interpolate
+   bone_blend = auto           # how bones are blended: auto (rotation-correct when extrapolating), linear, rotation
+   max_bone_turn = 25          # when extrapolating, a model with a bone turning faster than this (degrees per step)
+                               # is drawn at its real newest pose instead of a guess; 0 = no limit
+   max_extrapolation = 1.0     # how far ahead to guess, as a fraction of a step (0 to 1)
+   frame_pacing = smooth       # smooth: frame timing locked to fps, so ticks land on a steady pattern
+                               # measured: raw frame times (for comparison)
+   ```
+
+   The log shows the settings in use at startup (`config: …`) and names anything it ignored.
 
 ## Build
 

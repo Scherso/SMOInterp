@@ -13,9 +13,26 @@ namespace smo::actors {
     /* Called on the main thread when a logic tick starts; advances the history. */
     void BeginTick();
 
-    /* Wraps one model's GPU upload. Thread-safe across different models. */
+    /* Per-skeleton history, defined in actors.cpp. */
+    struct Entry;
+
+    /* How bone matrices are blended; chosen once per frame from the config. */
+    struct BoneOptions {
+        /* Slerp rotations instead of blending matrix components (see history::BlendRigid). */
+        bool rotation = false;
+        /*
+         * When extrapolating (alpha > 1): if any bone turned further than this in the last tick, given
+         * as the cosine of half the angle, the model is drawn at its newest pose instead. -1 = no limit.
+         */
+        float minHalfTurnCos = -1.f;
+    };
+
+    /*
+     * Wraps one model's GPU upload. Thread-safe across different models. Assumes one skeleton is
+     * never uploaded by two threads at once: an Entry's fields other than its key are not atomic.
+     */
     struct ScopedBlend {
-        ScopedBlend(void* modelCtrl, float alpha);
+        ScopedBlend(void* modelCtrl, float alpha, const BoneOptions& options);
         ~ScopedBlend();
 
         ScopedBlend(const ScopedBlend&) = delete;
@@ -23,7 +40,7 @@ namespace smo::actors {
 
     private:
         void* m_Skeleton = nullptr;
-        void* m_Entry = nullptr;
+        Entry* m_Entry = nullptr;
     };
 
     /* Drops all history. Only call while no model uploads can be running (scene teardown). */

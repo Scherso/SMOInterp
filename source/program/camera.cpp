@@ -1,12 +1,11 @@
 #include "camera.hpp"
 
-#include "history.hpp"
 #include "smo.hpp"
+#include "tuning.hpp"
 
 #include <cmath>
 #include <cstddef>
 #include <cstring>
-#include <numbers>
 
 namespace smo::camera {
     namespace {
@@ -30,17 +29,17 @@ namespace smo::camera {
         /*
          * Layout of sead::LookAtCamera, from sead's headers: sead::Camera's vtable and view matrix
          * (a Matrix34f, 3x4 floats), then the pos / at / up vectors doUpdateMatrix builds it from.
-         * The asserts pin it to the offsets doUpdateMatrix reads in SMO 1.0.0.
+         * The asserts pin it to the offsets doUpdateMatrix reads in SMO 1.0.0 (smo::fields).
          */
         struct LookAtCamera {
             void* vtable;
             float matrix[3][4];
             Vec3 pos, at, up;
         };
-        static_assert(offsetof(LookAtCamera, matrix) == 0x08);
-        static_assert(offsetof(LookAtCamera, pos) == 0x38);
-        static_assert(offsetof(LookAtCamera, at) == 0x44);
-        static_assert(offsetof(LookAtCamera, up) == 0x50);
+        static_assert(offsetof(LookAtCamera, matrix) == smo::fields::LookAtCamera_matrix);
+        static_assert(offsetof(LookAtCamera, pos) == smo::fields::LookAtCamera_pos);
+        static_assert(offsetof(LookAtCamera, at) == smo::fields::LookAtCamera_at);
+        static_assert(offsetof(LookAtCamera, up) == smo::fields::LookAtCamera_up);
 
         constexpr ptrdiff_t CameraPos = offsetof(LookAtCamera, pos);
         constexpr ptrdiff_t CameraAt = offsetof(LookAtCamera, at);
@@ -49,35 +48,29 @@ namespace smo::camera {
         constexpr ptrdiff_t CameraStateBegin = offsetof(LookAtCamera, matrix);
         constexpr size_t CameraStateSize = offsetof(LookAtCamera, up) + sizeof(Vec3) - CameraStateBegin;
 
-        /*
-         * A change bigger than either of these between ticks is a cut (warp, cutscene edit), not
-         * motion, so the camera snaps instead of blending. Turning 30 degrees in 1/60 s is 1800
-         * degrees per second, far faster than the player can turn the camera.
-         */
-        constexpr float CutDistance = history::TeleportDistance;
-        constexpr float CutMaxTurnDegrees = 30.f;
+        /* A change bigger than either between ticks is a cut (warp, cutscene edit), not motion: snap. */
+        constexpr float CutDistance = tuning::TeleportDistance;
         /* The dot product of two unit directions is the cosine of the angle between them. */
-        constexpr float CutMinDirectionDot = __builtin_cosf(CutMaxTurnDegrees * std::numbers::pi_v<float> / 180.f);
+        constexpr float CutMinDirectionDot = __builtin_cosf(tuning::DegreesToRadians(tuning::CameraCutDegrees));
 
         /*
-         * al::Projection embeds a sead::PerspectiveProjection whose parameters start at 0x98 (as
-         * al::Projection::setProj writes them). Their order is sead's: near, far, fovy, the fovy's
-         * cached sin / cos / tan, then aspect. The rest of al::Projection is derived frustum values
-         * and matrices, which setProj + calcMtx rebuild.
+         * sead::PerspectiveProjection's parameters inside al::Projection, in sead's order (see
+         * smo::fields::Projection_perspectiveParams). The rest of al::Projection is derived frustum
+         * values and matrices, which setProj + calcMtx rebuild.
          */
         struct PerspectiveParams {
             float near, far, fovy, fovySin, fovyCos, fovyTan, aspect;
         };
-        constexpr ptrdiff_t ProjParams = 0x98;
+        constexpr ptrdiff_t ProjParams = smo::fields::Projection_perspectiveParams;
         constexpr ptrdiff_t ProjNear = ProjParams + offsetof(PerspectiveParams, near);
         constexpr ptrdiff_t ProjFar = ProjParams + offsetof(PerspectiveParams, far);
         constexpr ptrdiff_t ProjFovy = ProjParams + offsetof(PerspectiveParams, fovy);
         constexpr ptrdiff_t ProjAspect = ProjParams + offsetof(PerspectiveParams, aspect);
-        static_assert(ProjAspect == 0xb0);
-        /* sizeof(al::Projection), so the whole object can be saved and restored. */
-        constexpr size_t ProjectionSize = 0x1f0;
+        static_assert(ProjAspect == smo::fields::Projection_aspect);
+        /* The whole object is saved and restored around a fovy blend. */
+        constexpr size_t ProjectionSize = smo::fields::Projection_size;
 
-        constexpr int MaxViews = 4;
+        constexpr int MaxViews = static_cast<int>(tuning::MaxCameraViews);
 
         struct Pose {
             Vec3 pos, at, up;
