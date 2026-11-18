@@ -19,7 +19,8 @@ INCLUDES	:=	include
 
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIC -fvisibility=hidden
 
-CFLAGS	:=	-g -Wall -Werror -O3 \
+# -fno-strict-aliasing: source/program reads game objects through raw offsets (smo::Field), as several types.
+CFLAGS	:=	-g -Wall -Werror -O3 -fno-strict-aliasing \
 			-ffunction-sections \
 			-Wno-format-zero-length \
 			-fdata-sections \

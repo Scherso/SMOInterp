@@ -1,12 +1,15 @@
 #include "lib.hpp"
 #include "actors.hpp"
 #include "camera.hpp"
+#include "clock.hpp"
 #include "config.hpp"
 #include "effects.hpp"
 #include "nvn.hpp"
 #include "smo.hpp"
+#include "tuning.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 using smo::Field;
@@ -23,83 +26,67 @@ namespace {
                            sizeof(smo::BuildId)) == 0;
     }
 
-    /* The Switch system tick runs at 19.2 MHz. */
-    constexpr u64 TicksPerSecond = 19'200'000;
-    /* Game logic is authored for exactly 60 steps per second. */
-    constexpr u64 TicksPerLogicStep = TicksPerSecond / 60;
-    constexpr u64 ReportTicks = TicksPerSecond * 2;
+    constexpr u64 ReportTicks = smo::clock::TicksPerSecond * smo::tuning::ReportIntervalSeconds;
+    /* Rates are logged with one decimal place, computed in tenths. */
+    constexpr u64 Tenths = 10;
 
-    /*
-     * Fixed-timestep accumulator. Each rendered frame adds its real elapsed time; the game tick
-     * (GameSystem::movement) only runs when a whole logic step has accumulated. The leftover
-     * fraction is how far the display has moved on from the newest logic state.
-     */
-    u64 s_LastFrameTick = 0;
-    u64 s_Accumulator = 0;
-    bool s_RunCalcThisFrame = true;
-    /*
-     * The blend weight from the previous tick (0) to the newest (1) that every hook draws with.
-     * Interpolation uses [0, 1], one tick behind; extrapolation uses [1, 2], continuing past the
-     * newest tick along its last step, so nothing lags.
-     */
-    float s_Alpha = 1.f;
-    /* This frame's real duration in ticks (~0.5 at 120 Hz); effects advance by this much per frame. */
-    float s_FrameTicks = 1.f;
+    smo::clock::FrameClock s_Clock;
+
+    /* This frame's blend weight per system, and how bones are blended (see clock::BlendWeight). */
+    struct FrameBlend {
+        float camera = 1.f;
+        float models = 1.f;
+        float effects = 1.f;
+        smo::actors::BoneOptions bones;
+    };
+    FrameBlend s_Blend;
 
     void AdvanceClock() {
-        u64 now = svcGetSystemTick();
-        if (s_LastFrameTick == 0)
-            s_LastFrameTick = now - TicksPerLogicStep;
+        const auto& config = smo::config::Get();
+        s_Clock.Advance(svcGetSystemTick(), config.fps,
+                        config.framePacing == smo::config::Settings::FramePacing::Smooth);
 
-        u64 elapsed = now - s_LastFrameTick;
-        s_FrameTicks = std::min(float(elapsed) / float(TicksPerLogicStep), 2.f);
+        float leftover = s_Clock.leftover;
+        s_Blend.camera = smo::clock::BlendWeight(config.camera, leftover, config.maxExtrapolation);
+        s_Blend.models = smo::clock::BlendWeight(config.models, leftover, config.maxExtrapolation);
+        s_Blend.effects = smo::clock::BlendWeight(config.effects, leftover, config.maxExtrapolation);
 
-        /* Cap the debt at two steps so a long stall (loading, breakpoint) doesn't fast-forward. */
-        s_Accumulator = std::min(s_Accumulator + elapsed, 2 * TicksPerLogicStep);
-        s_LastFrameTick = now;
-
-        /* At most one logic step per rendered frame: below 60 fps the game slows down, as in vanilla. */
-        s_RunCalcThisFrame = s_Accumulator >= TicksPerLogicStep;
-        if (s_RunCalcThisFrame)
-            s_Accumulator -= TicksPerLogicStep;
-
-        /* Interpolation runs one tick behind (prev -> curr); extrapolation runs level with the game (curr -> next). */
-        float leftover = std::min(float(s_Accumulator) / float(TicksPerLogicStep), 1.f);
-        switch (smo::config::Get().smoothing) {
-        case smo::config::Settings::Smoothing::Off:
-            s_Alpha = 1.f;
-            break;
-        case smo::config::Settings::Smoothing::Interpolate:
-            s_Alpha = leftover;
-            break;
-        case smo::config::Settings::Smoothing::Extrapolate:
-            s_Alpha = 1.f + leftover;
-            break;
-        }
+        using BoneBlend = smo::config::Settings::BoneBlend;
+        bool extrapolating = config.models == smo::config::Settings::Smoothing::Extrapolate;
+        s_Blend.bones.rotation =
+            config.boneBlend == BoneBlend::Rotation || (config.boneBlend == BoneBlend::Auto && extrapolating);
+        s_Blend.bones.minHalfTurnCos = config.maxBoneTurnDegrees > 0.f
+                                           ? std::cos(smo::tuning::DegreesToRadians(config.maxBoneTurnDegrees) / 2.f)
+                                           : -1.f;
     }
 
-    u64 s_FrameCount = 0;
-    u64 s_CalcCount = 0;
-    u64 s_WindowStartTick = 0;
-    u64 s_WindowStartFrame = 0;
-    u64 s_WindowStartCalc = 0;
+    /* Rendered frames and game ticks, logged as rates every ReportTicks. */
+    struct RateReport {
+        u64 frames = 0;
+        u64 ticks = 0;
+        u64 windowStartTick = 0;
+        u64 windowStartFrames = 0;
+        u64 windowStartTicks = 0;
+    };
+    RateReport s_Report;
 
     void Report() {
-        ++s_FrameCount;
+        ++s_Report.frames;
 
         u64 now = svcGetSystemTick();
-        u64 elapsed = now - s_WindowStartTick;
-        if (s_WindowStartTick != 0 && elapsed < ReportTicks)
+        u64 elapsed = now - s_Report.windowStartTick;
+        if (s_Report.windowStartTick != 0 && elapsed < ReportTicks)
             return;
 
-        if (s_WindowStartTick != 0) {
-            u64 fps10 = (s_FrameCount - s_WindowStartFrame) * TicksPerSecond * 10 / elapsed;
-            u64 calc10 = (s_CalcCount - s_WindowStartCalc) * TicksPerSecond * 10 / elapsed;
-            Logging.Log("render %lu.%lu fps, logic %lu.%lu steps/s", fps10 / 10, fps10 % 10, calc10 / 10, calc10 % 10);
+        if (s_Report.windowStartTick != 0) {
+            u64 fps = (s_Report.frames - s_Report.windowStartFrames) * smo::clock::TicksPerSecond * Tenths / elapsed;
+            u64 steps = (s_Report.ticks - s_Report.windowStartTicks) * smo::clock::TicksPerSecond * Tenths / elapsed;
+            Logging.Log("render %lu.%lu fps, logic %lu.%lu steps/s", fps / Tenths, fps % Tenths, steps / Tenths,
+                        steps % Tenths);
         }
-        s_WindowStartTick = now;
-        s_WindowStartFrame = s_FrameCount;
-        s_WindowStartCalc = s_CalcCount;
+        s_Report.windowStartTick = now;
+        s_Report.windowStartFrames = s_Report.frames;
+        s_Report.windowStartTicks = s_Report.ticks;
     }
 
     /* The scene whose graphics were updated by the last game tick, refreshed on draw-only frames. */
@@ -114,10 +101,10 @@ namespace {
         float rate;
         int swapMode;
     };
-    constexpr size_t MaxEffectGroupCalls = 64;
+    constexpr size_t MaxEffectGroupCalls = smo::tuning::MaxEffectGroupCalls;
     EffectGroupCall s_EffectGroupCalls[MaxEffectGroupCalls];
     size_t s_EffectGroupCallCount = 0;
-    constexpr size_t MaxEffectSystems = 4;
+    constexpr size_t MaxEffectSystems = smo::tuning::MaxEffectSystems;
     void* s_EffectSystems[MaxEffectSystems];
     size_t s_EffectSystemCount = 0;
 
@@ -137,14 +124,14 @@ HOOK_DEFINE_TRAMPOLINE(ProcFrame) {
 
 HOOK_DEFINE_TRAMPOLINE(ControllerMgrCalc) {
     static void Callback(void* controllerMgr) {
-        if (s_RunCalcThisFrame)
+        if (s_Clock.runCalcThisFrame)
             Orig(controllerMgr);
     }
 };
 
 HOOK_DEFINE_TRAMPOLINE(PrePassLightKeeperExecute) {
     static void Callback(void* keeper, void* shadowDirector) {
-        if (s_RunCalcThisFrame)
+        if (s_Clock.runCalcThisFrame)
             Orig(keeper, shadowDirector);
     }
 };
@@ -161,11 +148,11 @@ HOOK_DEFINE_TRAMPOLINE(LiveActorKitPreDrawGraphics) {
         void* director = Field<void*>(kit, smo::fields::LiveActorKit_cameraDirector);
         void* cameraInfo = director ? Field<void*>(director, smo::fields::CameraDirector_sceneCameraInfo) : nullptr;
 
-        if (s_RunCalcThisFrame && !s_CameraCapturedThisTick) {
+        if (s_Clock.runCalcThisFrame && !s_CameraCapturedThisTick) {
             smo::camera::Capture(cameraInfo);
             s_CameraCapturedThisTick = true;
         }
-        smo::camera::Apply(cameraInfo, s_Alpha);
+        smo::camera::Apply(cameraInfo, s_Blend.camera);
 
         Orig(kit);
     }
@@ -174,7 +161,7 @@ HOOK_DEFINE_TRAMPOLINE(LiveActorKitPreDrawGraphics) {
 HOOK_DEFINE_TRAMPOLINE(EffectSystemPreprocess) {
     static void Callback(void* effectSystem) {
         auto* end = s_EffectSystems + s_EffectSystemCount;
-        if (s_RunCalcThisFrame && std::find(s_EffectSystems, end, effectSystem) == end) {
+        if (s_Clock.runCalcThisFrame && std::find(s_EffectSystems, end, effectSystem) == end) {
             if (s_EffectSystemCount < MaxEffectSystems)
                 s_EffectSystems[s_EffectSystemCount++] = effectSystem;
             else
@@ -186,23 +173,27 @@ HOOK_DEFINE_TRAMPOLINE(EffectSystemPreprocess) {
 
 HOOK_DEFINE_TRAMPOLINE(VfxSystemCalculateGroup) {
     static void Callback(void* system, int group, float rate, int swapMode) {
-        if (s_RunCalcThisFrame) {
+        if (s_Clock.runCalcThisFrame) {
             if (s_EffectGroupCallCount < MaxEffectGroupCalls)
                 s_EffectGroupCalls[s_EffectGroupCallCount++] = { system, group, rate, swapMode };
             else
                 SMO_WARN_ONCE("limit: more than %zu effect group calls in a tick", MaxEffectGroupCalls);
         }
-        Orig(system, group, rate * s_FrameTicks, swapMode);
+        Orig(system, group, rate * s_Clock.frameTicks, swapMode);
     }
 };
 
 HOOK_DEFINE_TRAMPOLINE(EmitterSetCalculate) {
     static void Callback(void* emitterSet, float rate, int swapMode, bool flag, void* lodCallback) {
-        smo::effects::ScopedBlend blend(emitterSet, s_Alpha);
+        smo::effects::ScopedBlend blend(emitterSet, s_Blend.effects);
         Orig(emitterSet, rate, swapMode, flag, lodCallback);
     }
 };
 
+/*
+ * nn::vfx::EmitterSet::Initialize. Only the set pointer matters here; the five ints are passed
+ * through untouched and their meaning isn't known (OdysseyDecomp doesn't cover nn::vfx).
+ */
 HOOK_DEFINE_TRAMPOLINE(EmitterSetInitialize) {
     static void Callback(void* emitterSet, int a, int b, int c, int d, int e, void* heap) {
         smo::effects::Forget(emitterSet);
@@ -214,7 +205,7 @@ HOOK_DEFINE_TRAMPOLINE(UpdatePartsGraphics) {
     static void Callback(void* graphicsSystemInfo, void* updateInfo) {
         float& step = Field<float>(updateInfo, 0);
         float tickStep = step;
-        step = tickStep * s_FrameTicks;
+        step = tickStep * s_Clock.frameTicks;
         Orig(graphicsSystemInfo, updateInfo);
         step = tickStep;
     }
@@ -222,7 +213,7 @@ HOOK_DEFINE_TRAMPOLINE(UpdatePartsGraphics) {
 
 HOOK_DEFINE_TRAMPOLINE(FluidSimulateWaveUpdate) {
     static void Callback(void* wave, void* updateInfo) {
-        if (s_RunCalcThisFrame)
+        if (s_Clock.runCalcThisFrame)
             Orig(wave, updateInfo);
     }
 };
@@ -230,14 +221,14 @@ HOOK_DEFINE_TRAMPOLINE(FluidSimulateWaveUpdate) {
 /* Both of ModelCtrl's GPU upload paths upload blended bone matrices. */
 HOOK_DEFINE_TRAMPOLINE(ModelCtrlUpdateModelDrawBuffer) {
     static void Callback(void* modelCtrl, int bufferIndex) {
-        smo::actors::ScopedBlend blend(modelCtrl, s_Alpha);
+        smo::actors::ScopedBlend blend(modelCtrl, s_Blend.models, s_Blend.bones);
         Orig(modelCtrl, bufferIndex);
     }
 };
 
 HOOK_DEFINE_TRAMPOLINE(ModelCtrlUpdateGpuBuffer) {
     static void Callback(void* modelCtrl, int bufferIndex) {
-        smo::actors::ScopedBlend blend(modelCtrl, s_Alpha);
+        smo::actors::ScopedBlend blend(modelCtrl, s_Blend.models, s_Blend.bones);
         Orig(modelCtrl, bufferIndex);
     }
 };
@@ -277,7 +268,7 @@ namespace {
             EffectSystemPreprocess::Orig(s_EffectSystems[i]);
         for (size_t i = 0; i < s_EffectGroupCallCount; ++i) {
             const auto& call = s_EffectGroupCalls[i];
-            VfxSystemCalculateGroup::Orig(call.system, call.group, call.rate * s_FrameTicks, call.swapMode);
+            VfxSystemCalculateGroup::Orig(call.system, call.group, call.rate * s_Clock.frameTicks, call.swapMode);
         }
 
         /* Stands in for the simulation's clearGraphicsRequest: update() appends every query again. */
@@ -299,12 +290,12 @@ HOOK_DEFINE_TRAMPOLINE(GameSystemMovement) {
         /* The simulation (and our replay) must start from the camera the game itself produced. */
         smo::camera::Restore();
 
-        if (s_RunCalcThisFrame) {
+        if (s_Clock.runCalcThisFrame) {
             s_CameraCapturedThisTick = false;
             smo::actors::BeginTick();
             smo::effects::BeginTick();
             ForgetEffects();
-            ++s_CalcCount;
+            ++s_Report.ticks;
             Orig(gameSystem);
             return;
         }

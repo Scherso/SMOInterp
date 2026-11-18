@@ -14,10 +14,10 @@ BINARY_NAME := subsdk9
 SPECS_NAME := module.specs
 
 MOD_NAME := SMOInterp
-VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 ZIP := $(PWD)/$(MOD_NAME)-$(VERSION).zip
 
-.PHONY: clean all package format
+.PHONY: clean all package format test
 
 EXL_CFLAGS   := $(C_FLAGS) -DEXL_LOAD_KIND=$(LOAD_KIND) -DEXL_LOAD_KIND_ENUM=$(LOAD_KIND_ENUM) -DEXL_PROGRAM_ID=0x$(PROGRAM_ID)
 EXL_CXXFLAGS := $(CXX_FLAGS)
@@ -50,3 +50,11 @@ package: all
 # Formats the mod's own code (source/program/.clang-format); exlaunch is left alone.
 format:
 	@clang-format -i source/program/*.cpp source/program/*.hpp
+
+# Host-side tests for the game-independent parts of source/program (clock, config parser, history).
+HOSTCXX ?= c++
+test:
+	@mkdir -p $(PWD)/out
+	@$(HOSTCXX) -std=c++23 -Wall -Wextra -Werror -O2 -pthread -I$(PWD)/source/program \
+		$(PWD)/tests/host_tests.cpp -o $(PWD)/out/host_tests
+	@$(PWD)/out/host_tests

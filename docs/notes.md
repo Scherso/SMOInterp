@@ -959,52 +959,52 @@ $ grep "exlaunch\] \[" "$LOG"
 
 ```bash
 $ llvm-nm -C src.elf | grep -E " t .*::Callback\(" | sort
-00000000000087f0 t ControllerMgrCalc::Callback(void*)
-0000000000008810 t PrePassLightKeeperExecute::Callback(void*, void*)
-0000000000008830 t UpdateKitListPostOnNerveEnd::Callback(void*)
-0000000000008860 t UpdatePartsGraphics::Callback(void*, void*)
-00000000000088b0 t FluidSimulateWaveUpdate::Callback(void*, void*)
-0000000000008a00 t ProcFrame::Callback(void*)
-0000000000008b80 t LiveActorKitPreDrawGraphics::Callback(void*)
-0000000000008c00 t EffectSystemPreprocess::Callback(void*)
-0000000000008f30 t VfxSystemCalculateGroup::Callback(void*, int, float, int)
-0000000000009040 t EmitterSetCalculate::Callback(void*, float, int, bool, void*)
-00000000000090c0 t EmitterSetInitialize::Callback(void*, int, int, int, int, int, void*)
-0000000000009100 t ModelCtrlUpdateModelDrawBuffer::Callback(void*, int)
-0000000000009160 t ModelCtrlUpdateGpuBuffer::Callback(void*, int)
-00000000000091c0 t SceneDtor::Callback(void*)
-0000000000009220 t GameSystemMovement::Callback(void*)
-0000000000009950 t smo::nvn::BootstrapLoader::Callback(char const*)
+000000000000a3c0 t ControllerMgrCalc::Callback(void*)
+000000000000a3e0 t PrePassLightKeeperExecute::Callback(void*, void*)
+000000000000a400 t UpdateKitListPostOnNerveEnd::Callback(void*)
+000000000000a430 t UpdatePartsGraphics::Callback(void*, void*)
+000000000000a480 t FluidSimulateWaveUpdate::Callback(void*, void*)
+000000000000a590 t ProcFrame::Callback(void*)
+000000000000a900 t LiveActorKitPreDrawGraphics::Callback(void*)
+000000000000a980 t EffectSystemPreprocess::Callback(void*)
+000000000000acb0 t VfxSystemCalculateGroup::Callback(void*, int, float, int)
+000000000000adc0 t EmitterSetCalculate::Callback(void*, float, int, bool, void*)
+000000000000ae40 t EmitterSetInitialize::Callback(void*, int, int, int, int, int, void*)
+000000000000ae80 t ModelCtrlUpdateModelDrawBuffer::Callback(void*, int)
+000000000000aee0 t ModelCtrlUpdateGpuBuffer::Callback(void*, int)
+000000000000af40 t SceneDtor::Callback(void*)
+000000000000afa0 t GameSystemMovement::Callback(void*)
+000000000000b700 t smo::nvn::BootstrapLoader::Callback(char const*)
 ```
 
 Putting the two together, `site = 0x80490000 + offset`, `callback = 0x830f3000 + symbol`, and `word = 0x14000000 | ((callback − site) >> 2)`:
 
 ```
-main+0x8a6ab4  0x0080d36ab4 -> 0x00830fba00  148f13d3  ProcFrame::Callback
-main+0x536614  0x00809c6614 -> 0x00830fc220  149cd703  GameSystemMovement::Callback
-main+0x75b9a0  0x0080beb9a0 -> 0x00830fb7f0  14943f94  ControllerMgrCalc::Callback
-main+0x8c23fc  0x0080d523fc -> 0x00830fb810  148ea505  PrePassLightKeeperExecute::Callback
-main+0x9d0ce4  0x0080e60ce4 -> 0x00830fb830  148a6ad3  UpdateKitListPostOnNerveEnd::Callback
-main+0x910650  0x0080da0650 -> 0x00830fbb80  148d6d4c  LiveActorKitPreDrawGraphics::Callback
-main+0x93fe7c  0x0080dcfe7c -> 0x00830fc100  148cb0a1  ModelCtrlUpdateModelDrawBuffer::Callback
-main+0x93fbc0  0x0080dcfbc0 -> 0x00830fc160  148cb168  ModelCtrlUpdateGpuBuffer::Callback
-main+0xb2b274  0x0080fbb274 -> 0x00830fc040  14850373  EmitterSetCalculate::Callback
-main+0xb2a928  0x0080fba928 -> 0x00830fc0c0  148505e6  EmitterSetInitialize::Callback
-main+0x887454  0x0080d17454 -> 0x00830fbc00  148f91eb  EffectSystemPreprocess::Callback
-main+0xb38fd4  0x0080fc8fd4 -> 0x00830fbf30  1484cbd7  VfxSystemCalculateGroup::Callback
-main+0x8799b4  0x0080d099b4 -> 0x00830fb860  148fc7ab  UpdatePartsGraphics::Callback
-main+0x899510  0x0080d29510 -> 0x00830fb8b0  148f48e8  FluidSimulateWaveUpdate::Callback
-main+0x9ce52c  0x0080e5e52c -> 0x00830fc1c0  148a7725  SceneDtor::Callback
+main+0x8a6ab4  0x0080d36ab4 -> 0x00830fd590  148f1ab7  ProcFrame::Callback
+main+0x536614  0x00809c6614 -> 0x00830fdfa0  149cde63  GameSystemMovement::Callback
+main+0x75b9a0  0x0080beb9a0 -> 0x00830fd3c0  14944688  ControllerMgrCalc::Callback
+main+0x8c23fc  0x0080d523fc -> 0x00830fd3e0  148eabf9  PrePassLightKeeperExecute::Callback
+main+0x9d0ce4  0x0080e60ce4 -> 0x00830fd400  148a71c7  UpdateKitListPostOnNerveEnd::Callback
+main+0x910650  0x0080da0650 -> 0x00830fd900  148d74ac  LiveActorKitPreDrawGraphics::Callback
+main+0x93fe7c  0x0080dcfe7c -> 0x00830fde80  148cb801  ModelCtrlUpdateModelDrawBuffer::Callback
+main+0x93fbc0  0x0080dcfbc0 -> 0x00830fdee0  148cb8c8  ModelCtrlUpdateGpuBuffer::Callback
+main+0xb2b274  0x0080fbb274 -> 0x00830fddc0  14850ad3  EmitterSetCalculate::Callback
+main+0xb2a928  0x0080fba928 -> 0x00830fde40  14850d46  EmitterSetInitialize::Callback
+main+0x887454  0x0080d17454 -> 0x00830fd980  148f994b  EffectSystemPreprocess::Callback
+main+0xb38fd4  0x0080fc8fd4 -> 0x00830fdcb0  1484d337  VfxSystemCalculateGroup::Callback
+main+0x8799b4  0x0080d099b4 -> 0x00830fd430  148fce9f  UpdatePartsGraphics::Callback
+main+0x899510  0x0080d29510 -> 0x00830fd480  148f4fdc  FluidSimulateWaveUpdate::Callback
+main+0x9ce52c  0x0080e5e52c -> 0x00830fdf40  148a7e85  SceneDtor::Callback
 ```
 
 Let's make sure the assembler agrees with us about `GameSystem::movement`'s word (little-endian, so the bytes go in reverse):
 
 ```bash
-$ echo 0x03 0xd7 0x9c 0x14 | llvm-mc --disassemble -triple=aarch64
-    b    #41114636
+$ echo 0x63 0xde 0x9c 0x14 | llvm-mc --disassemble -triple=aarch64
+    b    #41122188
 ```
 
-`0x830fc220 − 0x809c6614 = 0x2735c0c = 41114636`. That's exactly the jump from `GameSystem::movement` into our callback. Inside the callback, `Orig(...)` calls the trampoline, which runs the displaced `sub sp, sp, #0x40` and branches back to `0x536618`.
+`0x830fdfa0 − 0x809c6614 = 0x273798c = 41122188`. That's exactly the jump from `GameSystem::movement` into our callback. Inside the callback, `Orig(...)` calls the trampoline, which runs the displaced `sub sp, sp, #0x40` and branches back to `0x536618`.
 
 ### What each callback does with that control.
 
@@ -1054,26 +1054,33 @@ $ xxd -s $((0x100 + 0x1c4d014)) -l 32 main-1.0.0.raw
 ## Section VIII.
 ### Running the tick at 60 Hz, and blending the frames in between.
 
-At the top of every `procFrame_`, the mod reads the Switch's system tick (19.2 MHz, so one logic step is `19200000 / 60 = 320000` ticks) and runs a fixed-step accumulator (`source/program/main.cpp`):
+At the top of every `procFrame_`, the mod reads the Switch's system tick (19.2 MHz, so one logic step is `19200000 / 60 = 320000` ticks) and runs a fixed-timestep accumulator (`smo::clock::FrameClock::Advance`, `source/program/clock.hpp`):
 
 ```cpp
-        u64 elapsed = now - s_LastFrameTick;
-        s_FrameTicks = std::min(float(elapsed) / float(TicksPerLogicStep), 2.f);
+            std::uint64_t measured = now - lastFrameTick;
+            std::uint64_t elapsed = measured;
+            if (smooth && targetFps > 0)
+                elapsed = Pace(measured, static_cast<std::uint64_t>(targetFps));
+            else
+                locked = false;
+            frameTicks = std::min(static_cast<float>(elapsed) / static_cast<float>(TicksPerLogicStep),
+                                  static_cast<float>(MaxStepDebt));
 
-        /* Cap the debt at two steps so a long stall (loading, breakpoint) doesn't fast-forward. */
-        s_Accumulator = std::min(s_Accumulator + elapsed, 2 * TicksPerLogicStep);
-        s_LastFrameTick = now;
+            /* Cap the debt so a long stall doesn't fast-forward. */
+            accumulator = std::min(accumulator + elapsed, MaxStepDebt * TicksPerLogicStep);
+            lastFrameTick = now;
 
-        /* At most one logic step per rendered frame: below 60 fps the game slows down, as in vanilla. */
-        s_RunCalcThisFrame = s_Accumulator >= TicksPerLogicStep;
-        if (s_RunCalcThisFrame)
-            s_Accumulator -= TicksPerLogicStep;
+            /* At most one logic step per rendered frame: below 60 fps the game slows down, as in vanilla. */
+            runCalcThisFrame = accumulator >= TicksPerLogicStep;
+            if (runCalcThisFrame)
+                accumulator -= TicksPerLogicStep;
 
-        /* Interpolation runs one tick behind (prev -> curr); extrapolation runs level with the game (curr -> next). */
-        float leftover = std::min(float(s_Accumulator) / float(TicksPerLogicStep), 1.f);
+            leftover = std::min(static_cast<float>(accumulator) / static_cast<float>(TicksPerLogicStep), 1.f);
 ```
 
-The blend weight is `leftover` for `interpolation = on`, `1 + leftover` for `extrapolate`, and `1` for `off`. Every blend in the mod (the camera, every skeleton's bone matrices, every particle emitter's placement) is the same line (`source/program/history.hpp`):
+`Pace` is smooth frame pacing (`frame_pacing = smooth`, the default). Timestamps read at the top of each frame jitter a little around the display's real, steady clock, and with plain measured time that jitter lands right on the decision of which frame runs the tick: at exactly 120 Hz every other frame sits *on* a tick boundary. Feeding the clock frames with ±5% timestamp jitter in the host tests, measured time broke the tick-every-other-frame pattern 515 times in 2400 frames and drew in-between frames anywhere from 0.48 to 1.0 of a tick. Smooth pacing counts every steady frame as exactly one display frame, pays the difference back to real time slowly, and starts with tick boundaries halfway *between* frames: 0 pattern breaks, and frames drawn at 0.25 and 0.75 of a tick within ±0.03, even at ±20% jitter. Real slowdowns and stalls still use measured time, so game speed is never smoothed away.
+
+The blend weight comes from `smo::clock::BlendWeight`, separately for the camera, the models and the effects: `leftover` when a system interpolates, `1 + leftover × max_extrapolation` when it extrapolates, and `1` when it's off. Every blend in the mod (the camera, every skeleton's bone matrices, every particle emitter's placement) is the same line (`source/program/history.hpp`):
 
 ```cpp
     inline void Blend(float* out, const float* prev, const float* curr, size_t count, float alpha) {
@@ -1290,6 +1297,13 @@ A second screenshot showed Mario looking ghosted in the water. That one happens 
 
 Interpolation always draws between the previous tick and the newest, so the picture runs up to one tick (16.7 ms) behind. With `interpolation = extrapolate`, the weight runs from 1 to 2 instead: every blend above continues the last step's motion past the newest tick (`curr + (curr − prev) * leftover`). No added latency, at the cost of overshooting for one frame when motion changes suddenly: stopping, landing, hitting a wall. The cut and teleport rules still apply, so a warp shows the newest tick as-is.
 
+In practice, full extrapolation had a very visible flaw: when Mario starts a roll, his arms flung straight out for a frame or two. A roll swings the arms through a big angle in a single tick, and blending bone matrices component by component, then pushing that blend *past* the newest tick, doesn't turn the arm further. It stretches and skews it. So extrapolation got split up and given some guard rails:
+
+- **Per-system modes.** `camera`, `models` and `effects` can each interpolate, extrapolate or be off. The `interpolation = camera` preset extrapolates only the camera: the delay you feel is the camera answering the right stick, and camera motion is smooth enough to predict, while every model keeps showing real poses.
+- **Rotation-correct bones** (`bone_blend = rotation`, the default whenever models extrapolate). Each bone matrix is split into a rotation (as a quaternion), a scale per axis and a translation. The rotation is slerped, which stays a real rotation even past the newest tick, so an arm keeps turning instead of stretching. Mirrored or degenerate bones fall back to the plain blend.
+- **A turn limit** (`max_bone_turn`, 25° by default). Once per tick, each model's fastest-turning bone is measured; if it turned further than the limit, that model is drawn at its real newest pose for the in-between frame instead of a guess. A roll starting is exactly that case.
+- **`max_extrapolation`** scales how far ahead the guess goes (1 = a whole tick, 0.5 = half), trading back a little latency for smaller overshoots.
+
 | What | Where it's blended | Snaps (no blend) when |
 |---|---|---|
 | Camera position, target, up and FOV | `LiveActorKit::preDrawGraphics`, before the renderer copies the view | it jumps > 10 m or turns > 30° in one tick |
@@ -1310,15 +1324,20 @@ $ llvm-nm src.elf | grep -i nvnBootstrap
                  U nvnBootstrapLoader
 ```
 
-Whenever the game asks for `nvnWindowSetPresentInterval` or `nvnWindowBuilderSetPresentInterval`, we hand back our own versions, which ignore the game's `1` and pass this instead (`source/program/nvn.cpp`):
+Whenever the game asks for `nvnWindowSetPresentInterval` or `nvnWindowBuilderSetPresentInterval`, we hand back our own versions, which ignore the game's `1` and pass `PresentIntervalFor(fps)` instead (`source/program/nvn.hpp`):
 
 ```cpp
-    int PresentInterval() {
-        return (config::Get().fps * 5 + 1) / 3;
+    constexpr int CompositorBaseRate = 60;
+    constexpr int CompositorSpeedScaleDivisor = 100;
+
+    /* The interval that presents at `fps`, rounded to the nearest: 120 -> 200, 144 -> 240. */
+    constexpr int PresentIntervalFor(int fps) {
+        return (fps * CompositorSpeedScaleDivisor + CompositorBaseRate / 2) / CompositorBaseRate;
     }
+    static_assert(PresentIntervalFor(120) == 200 && PresentIntervalFor(144) == 240);
 ```
 
-Why `fps * 5/3`? Let's look at the emulator's compositor.
+Why those numbers? Let's look at the emulator's compositor.
 
 ```bash
 $ grep -rn "swap interval" src/core/hle/service/nvnflinger/
@@ -1349,7 +1368,7 @@ and in `src/core/hle/service/vi/conductor.cpp`, the frame period gets divided by
     s64 period = static_cast<s64>(speed_scale * (1000000000.f / effective_fps));
 ```
 
-So an interval of `n >= 5` composites at `60 * n / 100` frames a second. For `fps = 120`, `(120 * 5 + 1) / 3 = 200`, and `60 * 200 / 100 = 120`.
+So an interval of `n >= 5` composites at `60 * n / 100` frames a second. `PresentIntervalFor` is that formula turned around and rounded to the nearest whole interval: for `fps = 120`, `(120 * 100 + 30) / 60 = 200`, and `60 * 200 / 100 = 120`.
 
 ### How I got to that number.
 
@@ -1427,8 +1446,8 @@ Now it renders 120 frames smoothly :)
 ### Where it stands.
 
 - **Input is still sampled at 60 Hz.** The game only reads input once per tick ([Attempt 4](#attempt-4-dropped-inputs)).
-- **`interpolation = on` draws up to one tick (16.7 ms) behind.** `extrapolate` doesn't, but can overshoot for a frame.
-- **HUD animations still step at 60 Hz.** Layouts aren't blended.
+- **`interpolation = on` draws up to one tick (16.7 ms) behind.** `camera` removes that delay for the camera only; `extrapolate` (experimental) removes it everywhere, but can overshoot for a frame.
+- **The HUD isn't interpolated.** Its animations advance at the game's normal 60 Hz, exactly as without the mod; only the 3D world, camera and effects get the extra frames.
 - **Only 1.0.0.** Every address here is from OdysseyDecomp's 1.0.0 map; supporting 1.3.0 would mean finding all of them again.
 - **Not yet tested:** bosses, Odyssey warps, snapshot mode, 2-player mode, moon cutscenes.
 

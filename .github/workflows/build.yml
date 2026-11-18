@@ -16,6 +16,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Host tests
+        run: make test
+
       # Same as a local build: make runs the pinned devkitA64 container from the Makefile.
       - name: Build and package
         run: make package
