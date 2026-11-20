@@ -102,9 +102,10 @@ The game itself never sees a blended value: everything is written just before th
 | What | Where it's blended | Snaps (no blend) when |
 |---|---|---|
 | Camera position, target, up and FOV | `LiveActorKit::preDrawGraphics`, before the renderer copies the view | the camera jumps > 10 m or turns > 30° in one tick |
-| Every model's bone world matrices | `ModelCtrl::updateModelDrawBuffer` / `updateGpuBuffer`, around the GPU upload | the root moves > 10 m in one tick, or the model skipped a tick |
+| Every model's bone world matrices | `ModelCtrl::updateModelDrawBuffer`, around the GPU upload | the root moves > 10 m in one tick, or the model skipped a tick |
 | Effect anchors (`EmitterSet` placement) | `EmitterSet::Calculate`, now run every frame | the set moved > 10 m, or its slot was reused for a new effect |
 | Particle simulation | `nn::vfx::System::Calculate(group, rate)`, with `rate` scaled to each frame's share of a tick | the group is paused (rate 0) |
+| Water, sky and clouds | not interpolated; `GraphicsSystemInfo::updateGraphics` passes a fixed 1/60 per frame | — (runs faster above 60 fps) |
 
 Model uploads run on the engine's worker threads, so the per-skeleton history lives in a lock-free table.
 

@@ -10,21 +10,12 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 
 using smo::Field;
 using smo::MainFunc;
 
 namespace {
     using ObjFn = void (*)(void*);
-
-    bool IsSupportedBuild() {
-        const auto& main = exl::util::GetMainModuleInfo().m_Total;
-        if (main.m_Size < smo::BuildIdOffset + sizeof(smo::BuildId))
-            return false;
-        return std::memcmp(reinterpret_cast<const void*>(main.m_Start + smo::BuildIdOffset), smo::BuildId,
-                           sizeof(smo::BuildId)) == 0;
-    }
 
     constexpr u64 ReportTicks = smo::clock::TicksPerSecond * smo::tuning::ReportIntervalSeconds;
     /* Rates are logged with one decimal place, computed in tenths. */
@@ -201,16 +192,6 @@ HOOK_DEFINE_TRAMPOLINE(EmitterSetInitialize) {
     }
 };
 
-HOOK_DEFINE_TRAMPOLINE(UpdatePartsGraphics) {
-    static void Callback(void* graphicsSystemInfo, void* updateInfo) {
-        float& step = Field<float>(updateInfo, 0);
-        float tickStep = step;
-        step = tickStep * s_Clock.frameTicks;
-        Orig(graphicsSystemInfo, updateInfo);
-        step = tickStep;
-    }
-};
-
 HOOK_DEFINE_TRAMPOLINE(FluidSimulateWaveUpdate) {
     static void Callback(void* wave, void* updateInfo) {
         if (s_Clock.runCalcThisFrame)
@@ -218,15 +199,8 @@ HOOK_DEFINE_TRAMPOLINE(FluidSimulateWaveUpdate) {
     }
 };
 
-/* Both of ModelCtrl's GPU upload paths upload blended bone matrices. */
+/* ModelCtrl's per-frame skeleton upload: bones are blended around it. */
 HOOK_DEFINE_TRAMPOLINE(ModelCtrlUpdateModelDrawBuffer) {
-    static void Callback(void* modelCtrl, int bufferIndex) {
-        smo::actors::ScopedBlend blend(modelCtrl, s_Blend.models, s_Blend.bones);
-        Orig(modelCtrl, bufferIndex);
-    }
-};
-
-HOOK_DEFINE_TRAMPOLINE(ModelCtrlUpdateGpuBuffer) {
     static void Callback(void* modelCtrl, int bufferIndex) {
         smo::actors::ScopedBlend blend(modelCtrl, s_Blend.models, s_Blend.bones);
         Orig(modelCtrl, bufferIndex);
@@ -309,11 +283,19 @@ HOOK_DEFINE_TRAMPOLINE(GameSystemMovement) {
 extern "C" void exl_main(void* x0, void* x1) {
     exl::hook::Initialize();
 
-    /* Every offset below is for 1.0.0; hooking any other build would corrupt random code. */
-    if (!IsSupportedBuild()) {
-        Logging.Log("main is not SMO 1.0.0 (3CA12DFA...), not installing hooks");
+    /*
+     * Pick the offset table from main's GNU build-id note. Every address below belongs to one build;
+     * with no match, installing hooks would overwrite whatever happens to be at those offsets.
+     */
+    const auto& main = exl::util::GetMainModuleInfo().m_Total;
+    const smo::offsets::Table* table =
+        smo::offsets::Detect(reinterpret_cast<const void*>(main.m_Start), main.m_Size);
+    if (table == nullptr) {
+        Logging.Log("main is not a supported SMO build, not installing hooks");
         return;
     }
+    smo::offsets::Select(*table);
+    Logging.Log("using offsets for SMO %s", table->name);
 
     smo::nvn::InstallHooks();
     ProcFrame::InstallAtOffset(smo::offsets::GameFrameworkNx_procFrame);
@@ -324,12 +306,10 @@ extern "C" void exl_main(void* x0, void* x1) {
     LiveActorKitPreDrawGraphics::InstallAtOffset(smo::offsets::LiveActorKit_preDrawGraphics);
     EffectSystemPreprocess::InstallAtOffset(smo::offsets::EffectSystem_preprocess);
     VfxSystemCalculateGroup::InstallAtOffset(smo::offsets::VfxSystem_CalculateGroup);
-    UpdatePartsGraphics::InstallAtOffset(smo::offsets::GraphicsSystemInfo_updatePartsGraphics);
     FluidSimulateWaveUpdate::InstallAtOffset(smo::offsets::FluidSimulateWave_update);
     EmitterSetCalculate::InstallAtOffset(smo::offsets::EmitterSet_Calculate);
     EmitterSetInitialize::InstallAtOffset(smo::offsets::EmitterSet_Initialize);
     ModelCtrlUpdateModelDrawBuffer::InstallAtOffset(smo::offsets::ModelCtrl_updateModelDrawBuffer);
-    ModelCtrlUpdateGpuBuffer::InstallAtOffset(smo::offsets::ModelCtrl_updateGpuBuffer);
     SceneDtor::InstallAtOffset(smo::offsets::Scene_dtor);
 
     Logging.Log("hooks installed");

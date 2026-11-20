@@ -16,7 +16,7 @@ I set out with the goal of playing Super Mario Odyssey at 120 FPS, the refresh r
 - [Section IV. Finding the frame loop](#section-iv)
 - [Section V. Finding the game tick, one crash at a time](#section-v)
 - [Section VI. What a hook actually writes](#section-vi)
-- [Section VII. Refusing to run on the wrong version](#section-vii)
+- [Section VII. Checking the game version](#section-vii)
 - [Section VIII. Running the tick at 60 Hz, and blending the frames in between](#section-viii)
 - [Section IX. Getting the Switch emulator to actually present faster](#section-ix)
 - [Section X. Building it, installing it, and checking it works](#section-x)
@@ -65,7 +65,7 @@ The use of this method requires that we run code inside the game, which lead me 
 ## Section II.
 ### Getting a dump of the 1.0.0 ExeFS.
 
-A code mod needs to know where functions and structure fields are. [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp), the community decompilation of SMO, gives us names and addresses, but only for **1.0.0**. So everything here targets 1.0.0, and the mod refuses to run on anything else.
+A code mod needs to know where functions and structure fields are. [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp), the community decompilation of SMO, gives us names and addresses, but only for **1.0.0**, so the addresses in this guide are 1.0.0's. The mod reads the build ID and selects the matching offset table; the 1.3.0 / 1.4.0 / 1.4.1 table was transferred from this map and checked against the 1.4.1 update's `main`.
 
 The game's code lives in its ExeFS, a small filesystem inside the game's Program NCA, holding `main` (the game itself), `rtld` (the dynamic linker), `sdk` (Nintendo's SDK), `subsdk0` and `main.npdm` (the process's permissions). All of this compressed into an NSP and encrypted, so a hex editor or objdump can't read it until it's decrypted with keys from your own console.
 
@@ -363,7 +363,7 @@ $ xxd -s 0x40 -l 16 exefs/main
 00000040: 3ca1 2dfa af9c 82da 064d 1698 df79 cda1  <.-......M...y..
 ```
 
-`3CA12DFAAF9C82DA064D1698DF79CDA1` is 1.0.0. If you see `b424be15…` instead, that's 1.3.0: the Update was still enabled.
+`3CA12DFAAF9C82DA064D1698DF79CDA1` is 1.0.0. If you see `b424be15…` instead, that's the 1.3.0 / 1.4.0 / 1.4.1 update; the mod supports both.
 
 - **Decompressing it.** The NSO's segments are LZ4-compressed. [hactool](https://github.com/SciresM/hactool) unpacks them. Decompressing needs no keys, so we point it at an empty key file; otherwise hactool loads `~/.switch/prod.keys` if you have one and prints warnings containing key values.
 
@@ -987,12 +987,10 @@ main+0x8c23fc  0x0080d523fc -> 0x00830fd3e0  148eabf9  PrePassLightKeeperExecute
 main+0x9d0ce4  0x0080e60ce4 -> 0x00830fd400  148a71c7  UpdateKitListPostOnNerveEnd::Callback
 main+0x910650  0x0080da0650 -> 0x00830fd900  148d74ac  LiveActorKitPreDrawGraphics::Callback
 main+0x93fe7c  0x0080dcfe7c -> 0x00830fde80  148cb801  ModelCtrlUpdateModelDrawBuffer::Callback
-main+0x93fbc0  0x0080dcfbc0 -> 0x00830fdee0  148cb8c8  ModelCtrlUpdateGpuBuffer::Callback
 main+0xb2b274  0x0080fbb274 -> 0x00830fddc0  14850ad3  EmitterSetCalculate::Callback
 main+0xb2a928  0x0080fba928 -> 0x00830fde40  14850d46  EmitterSetInitialize::Callback
 main+0x887454  0x0080d17454 -> 0x00830fd980  148f994b  EffectSystemPreprocess::Callback
 main+0xb38fd4  0x0080fc8fd4 -> 0x00830fdcb0  1484d337  VfxSystemCalculateGroup::Callback
-main+0x8799b4  0x0080d099b4 -> 0x00830fd430  148fce9f  UpdatePartsGraphics::Callback
 main+0x899510  0x0080d29510 -> 0x00830fd480  148f4fdc  FluidSimulateWaveUpdate::Callback
 main+0x9ce52c  0x0080e5e52c -> 0x00830fdf40  148a7e85  SceneDtor::Callback
 ```
@@ -1017,12 +1015,10 @@ $ echo 0x63 0xde 0x9c 0x14 | llvm-mc --disassemble -triple=aarch64
 | `0x9d0ce4` | `al::updateKitListPostOnNerveEnd` | `Orig`, then remember the scene for replay. |
 | `0x910650` | `al::LiveActorKit::preDrawGraphics` | Record the tick's camera, write the blended one ([The camera](#the-camera)). |
 | `0x93fe7c` | `al::ModelCtrl::updateModelDrawBuffer` | Blend the bone matrices around the GPU upload, then restore them ([Every model's skeleton](#every-models-skeleton)). |
-| `0x93fbc0` | `al::ModelCtrl::updateGpuBuffer` | Same, for the other upload path. |
 | `0xb2b274` | `nn::vfx::EmitterSet::Calculate` | Blend where the effect is anchored ([Effect anchors](#effect-anchors)). |
 | `0xb2a928` | `nn::vfx::EmitterSet::Initialize` | Forget a recycled slot's history. |
 | `0x887454` | `al::EffectSystem::preprocess` | Recorded on ticks, replayed on draw-only frames ([Particles](#particles)). |
 | `0xb38fd4` | `nn::vfx::System::Calculate(int, float, BufferSwapMode)` | `rate * frameTicks`; recorded on ticks, replayed on draw-only frames. |
-| `0x8799b4` | `al::GraphicsSystemInfo::updatePartsGraphics` | Time step `* frameTicks`, restored after ([Water, sky and ripples](#water-sky-and-ripples)). |
 | `0x899510` | `al::FluidSimulateWave::update` | `Orig` only on logic frames. |
 | `0x9ce52c` | `al::Scene::~Scene` | Drop the saved scene and all history ([Attempt 3](#attempt-3-replay-the-scenes-graphics-update)). |
 
@@ -1031,9 +1027,9 @@ Plus one more, `nvnBootstrapLoader`, for the frame rate ([Section IX](#section-i
 <br />
 
 ## Section VII.
-### Refusing to run on the wrong version.
+### Checking the game version.
 
-Hooking the wrong build would overwrite random code with branches, so before any of the above, the mod checks it's on 1.0.0. The NSO header isn't mapped into memory, but GNU linkers put a build-ID **note** inside the image itself.
+Hooking the wrong build would overwrite random code with branches, so the mod checks which build it is on before doing any of the above. The NSO header isn't mapped into memory, but GNU linkers put a build-ID **note** inside the image itself.
 
 ```bash
 $ xxd -s $((0x100 + 0x1c4d014)) -l 32 main-1.0.0.raw
@@ -1047,7 +1043,7 @@ $ xxd -s $((0x100 + 0x1c4d014)) -l 32 main-1.0.0.raw
 - `474e5500` **name** = `"GNU\0"`
 - then the 16-byte build ID, at `main+0x1c4d024`.
 
-`exl_main` compares those 16 bytes with `3ca12dfa…cda1`. On a mismatch it logs `main is not SMO 1.0.0` and returns without installing a single hook.
+`exl_main` compares those 16 bytes with the builds it knows and picks that build's offset table: 1.0.0 (`3ca12dfa…cda1`) or 1.3.0 / 1.4.0 / 1.4.1 (`b424be15…9ebf`). With no match it logs and installs nothing.
 
 <br />
 
@@ -1134,7 +1130,7 @@ With only the camera blended, there was a clear jitter to Mario's movement, and 
 
 ### Every model's skeleton.
 
-`al::ModelCtrl` computes a model's pose on ticks (`ModelCtrl::calc` -> `nn::g3d::SkeletonObj::CalculateWorldMtx`, on `[[ModelCtrl+0]+0x38]`, i.e. ModelCtrl -> ModelObj -> SkeletonObj), and uploads it per frame in `updateModelDrawBuffer` (`0x93fe7c`) and `updateGpuBuffer` (`0x93fbc0`), on the engine's worker threads. Poses computed on ticks, uploaded per frame: that's the seam.
+`al::ModelCtrl` computes a model's pose on ticks (`ModelCtrl::calc` -> `nn::g3d::SkeletonObj::CalculateWorldMtx`, on `[[ModelCtrl+0]+0x38]`, i.e. ModelCtrl -> ModelObj -> SkeletonObj), and uploads it per frame in `updateModelDrawBuffer` (`0x93fe7c`), on the engine's worker threads. Poses computed on ticks, uploaded per frame: that's the seam.
 
 `nn::g3d` is Nintendo's SDK, so the decomp doesn't cover it, but its code is in `main`:
 
@@ -1241,7 +1237,7 @@ It only stores fovy and `tan(fovy/2)`, and rebuilds nothing. `al::Projection::se
 
 ### Water, sky and ripples.
 
-A screenshot from a waterfall pool showed bright white streaks on the water around Mario. The water, ocean, sky and clouds are "parts graphics", updated through `updatePartsGraphics`:
+A screenshot from a waterfall pool showed bright white streaks on the water around Mario. The water, ocean, sky and clouds are "parts graphics", updated through a per-frame parts loop:
 
 ```bash
 $ python3 dis.py 0x8799b4
@@ -1287,7 +1283,20 @@ $ python3 dis.py 0x899510 | sed -n '6,13p'
   89953c: str s0, [x19, #0x338]
 ```
 
-`SineWave::update` does `phase += info.step`, and `FluidSimulateWave::update` (the ripples) does `prevTime = time; time += info.step`. **The first field is a time step, 1.0 per call.** These run with the render bookkeeping, which since [Attempt 5](#attempt-5-buildings-flickering-in-and-out) runs every frame, so all of them were animating at double speed. **Fix:** scale that step by the frame's share of a tick, and restore it after.
+`SineWave::update` does `phase += info.step`, and `FluidSimulateWave::update` (the ripples) does `prevTime = time; time += info.step`. **The first field is a time step, 1.0 per call.** These run with the render bookkeeping, which since [Attempt 5](#attempt-5-buildings-flickering-in-and-out) runs every frame.
+
+`updatePartsGraphics` above is only an out-of-line copy that nothing branches to. The loop that actually runs is inlined into `GraphicsSystemInfo::updateGraphics` (`0x8797bc`), and it passes a fixed `0x3c888889` (1/60 s) on every call:
+
+```bash
+$ python3 dis.py 0x8797bc | sed -n '1,14p'
+  8797cc: mov w8, #0x3c880000
+  8797d0: movk w8, #0x8889
+  8797dc: str w8, [sp, #0x8]
+  8797f4: add x1, sp, #0x8
+  8797f8: blr x8
+```
+
+So the water surface, sky and clouds advance 1/60 s per rendered frame and run at twice game speed at 120 fps. Hooking the out-of-line function (as earlier builds did) does nothing; scaling the inlined step by the frame's share is still TODO.
 
 Ripples needed one more rule: `FluidSimulateWave::calcGpu` runs **one fixed simulation step** whenever `time − prevTime` isn't near zero, whatever its size. A half-size step is still a full ripple step. So `FluidSimulateWave::update` only runs on logic frames; on draw-only frames the difference stays 0 and the step is skipped.
 
@@ -1307,10 +1316,10 @@ In practice, full extrapolation had a very visible flaw: when Mario starts a rol
 | What | Where it's blended | Snaps (no blend) when |
 |---|---|---|
 | Camera position, target, up and FOV | `LiveActorKit::preDrawGraphics`, before the renderer copies the view | it jumps > 10 m or turns > 30° in one tick |
-| Every model's bone world matrices | around `ModelCtrl::updateModelDrawBuffer` / `updateGpuBuffer` | the root moves > 10 m in one tick, or the model skipped a tick |
+| Every model's bone world matrices | around `ModelCtrl::updateModelDrawBuffer` | the root moves > 10 m in one tick, or the model skipped a tick |
 | Effect anchors (`EmitterSet` placement) | `EmitterSet::Calculate`, now run every frame | the set moved > 10 m, or its slot was reused |
 | Particle simulation | `nn::vfx::System::Calculate(group, rate)`, rate * frame share | the group is paused (rate 0) |
-| Water, sky and clouds | `updatePartsGraphics`, time step * frame share | never; ripples only step on logic frames |
+| Water, sky and clouds | not interpolated; `GraphicsSystemInfo::updateGraphics` passes a fixed 1/60 per frame | — (runs faster above 60 fps) |
 
 <br />
 
@@ -1448,7 +1457,8 @@ Now it renders 120 frames smoothly :)
 - **Input is still sampled at 60 Hz.** The game only reads input once per tick ([Attempt 4](#attempt-4-dropped-inputs)).
 - **`interpolation = on` draws up to one tick (16.7 ms) behind.** `camera` removes that delay for the camera only; `extrapolate` (experimental) removes it everywhere, but can overshoot for a frame.
 - **The HUD isn't interpolated.** Its animations advance at the game's normal 60 Hz, exactly as without the mod; only the 3D world, camera and effects get the extra frames.
-- **Only 1.0.0.** Every address here is from OdysseyDecomp's 1.0.0 map; supporting 1.3.0 would mean finding all of them again.
+- **Water, sky and clouds aren't interpolated.** The live parts loop is inlined in `GraphicsSystemInfo::updateGraphics` and uses a fixed 1/60 s step per rendered frame, so they run faster above 60 fps. The out-of-line `updatePartsGraphics` is dead code; hooking it does nothing.
+- **Supported builds: 1.0.0 and 1.3.0 / 1.4.0 / 1.4.1.** The 1.3.0 / 1.4.0 / 1.4.1 addresses were transferred from OdysseyDecomp's 1.0.0 map and checked against the 1.4.1 update's `main`.
 - **Not yet tested:** bosses, Odyssey warps, snapshot mode, 2-player mode, moon cutscenes.
 
 <br />

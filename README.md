@@ -17,12 +17,12 @@ It's a code mod built with [exlaunch](https://github.com/shadowninja108/exlaunch
 
 ## Requirements
 
-- Super Mario Odyssey **1.0.0**. The mod checks the game version and does nothing on any other version.
+- Super Mario Odyssey **1.0.0** or **1.3.0 / 1.4.0 / 1.4.1** (the three updates share one executable on Switch, so one offset table covers them). The mod reads the build ID at startup and picks the matching table; an unknown build is left alone.
 - Eden, yuzu, or another yuzu-based emulator (Citron, Sudachi), on Windows, Linux or Android
 
 ## Install
 
-1. Right-click SMO in your emulator → **Properties → Add-ons** and **uncheck the Update**, so the game runs as 1.0.0. Back up your save first.
+1. Back up your save first. The mod supports **1.0.0** and **1.3.0 / 1.4.0 / 1.4.1**, so either the base game or the update works; it checks the build ID and picks the right offsets.
 2. Download the zip from [Releases](../../releases) and extract it into the emulator's `load` folder, so you end up with `load/0100000000010000/SMOInterp/exefs/`. The easiest way to find `load` is to right-click SMO → **Open Mod Data Location** and go up one folder. Or:
 
    | Emulator | Linux | Windows |
@@ -80,6 +80,7 @@ GitHub Actions builds every push. Pushing a `v*` tag publishes a release.
 
 - Button presses still register at 60 Hz. With `interpolation = on` the picture runs up to one logic step (16.7 ms) behind; `extrapolate` avoids that but has the possibility of overshooting for a frame.
 - HUD isn't interpolated. I don't think this matters that much. If someone wants to pr and make it work go for it. 
+- Water, sky and clouds aren't interpolated and run faster above 60 fps: `GraphicsSystemInfo::updateGraphics` passes a fixed 1/60 s step per rendered frame. The standalone `updatePartsGraphics` is unreferenced (dead code), so hooking it does nothing.
 
 ## How it works
 
@@ -87,13 +88,14 @@ SMOInterp doesn't change any bytes in the game's files. The emulator loads it as
 
 ### 1. Checking the game version
 
-Every address below belongs to SMO 1.0.0 only. Before touching anything, the mod reads the build ID that is mapped in memory at `main+0x1c4d024` and compares it with 1.0.0's:
+Every address below belongs to one game build, so before touching anything the mod reads main's GNU build-ID note and compares it with the builds it knows:
 
-```
-3C A1 2D FA AF 9C 82 DA 06 4D 16 98 DF 79 CD A1
-```
+| Version | Build ID | Note payload at |
+|---|---|---|
+| 1.0.0 | `3CA12DFA AF9C82DA 064D1698 DF79CDA1` | `main+0x1c4d024` |
+| 1.3.0 / 1.4.0 / 1.4.1 | `B424BE15 0A8E7D78 701CBE7A 439D9EBF` | `main+0x1199dbc` |
 
-If it doesn't match, it logs `main is not SMO 1.0.0` and installs nothing. Hooking the wrong build would overwrite random code.
+The three updates share one executable on Switch, so one offset table covers all of them. A build the mod doesn't know is left alone.
 
 ### 2. Hooking a function
 
@@ -119,7 +121,7 @@ The callback then decides what happens. For `GameSystem::movement`, it calls the
 
 ### 3. What each hook does
 
-All addresses are offsets from the start of the game's `main` executable, taken from [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp)'s `data/file_list.yml`.
+All addresses are offsets from the start of the game's `main` executable: [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp)'s `data/file_list.yml` for 1.0.0, and the update's `main` for 1.3.0 / 1.4.0 / 1.4.1. The table shows 1.0.0's addresses; each supported build has its own offset table.
 
 | Address | Function | What SMOInterp does |
 |---|---|---|
@@ -130,12 +132,10 @@ All addresses are offsets from the start of the game's `main` executable, taken 
 | `0x9d0ce4` | `al::updateKitListPostOnNerveEnd` | Remembers which scene to redraw on in-between frames. |
 | `0x910650` | `al::LiveActorKit::preDrawGraphics` | Records each step's camera and writes the blended camera before the renderer copies it. |
 | `0x93fe7c` | `al::ModelCtrl::updateModelDrawBuffer` | Blends every model's bone matrices around the GPU upload, then restores the real ones. |
-| `0x93fbc0` | `al::ModelCtrl::updateGpuBuffer` | Same, for the other upload path. |
 | `0xb2b274` | `nn::vfx::EmitterSet::Calculate` | Blends where each particle effect is anchored. |
 | `0xb2a928` | `nn::vfx::EmitterSet::Initialize` | Forgets the history of a recycled effect slot. |
 | `0x887454` | `al::EffectSystem::preprocess` | Recorded on game steps and repeated on in-between frames. |
 | `0xb38fd4` | `nn::vfx::System::Calculate` | Advances particles by each frame's share of a step instead of a whole step. |
-| `0x8799b4` | `GraphicsSystemInfo::updatePartsGraphics` | Same for water, sky and clouds, which would otherwise animate at double speed. |
 | `0x899510` | `FluidSimulateWave::update` | Water ripples only step on game steps. |
 | `0x9ce52c` | `al::Scene::~Scene` | Clears all saved history when a scene is unloaded. |
 
