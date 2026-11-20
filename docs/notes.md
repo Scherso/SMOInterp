@@ -67,6 +67,8 @@ The use of this method requires that we run code inside the game, which lead me 
 
 A code mod needs to know where functions and structure fields are. [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp), the community decompilation of SMO, gives us names and addresses, but only for **1.0.0**. So everything here targets 1.0.0, and the mod refuses to run on anything else.
 
+> **Later addition, by [Reilly Brogan](https://github.com/ReillyBrogan) ([PR #2](https://github.com/Scherso/SMOInterp/pull/2)):** the mod now also supports 1.3.0 / 1.4.0 / 1.4.1. It reads the build ID and selects the matching offset table. The addresses in this guide are still 1.0.0's; the 1.3.0 / 1.4.0 / 1.4.1 table was transferred from this map and checked against the 1.4.1 update's `main`.
+
 The game's code lives in its ExeFS, a small filesystem inside the game's Program NCA, holding `main` (the game itself), `rtld` (the dynamic linker), `sdk` (Nintendo's SDK), `subsdk0` and `main.npdm` (the process's permissions). All of this compressed into an NSP and encrypted, so a hex editor or objdump can't read it until it's decrypted with keys from your own console.
 
 We need to read the decrypted output, which there are two ways to get, you could either do it by hand from the NSP with [`hactool`](https://github.com/SciresM/hactool), or just have the Switch emulator do it. Both will output the same five files. I'll demonstrate both for documentation purposes.
@@ -364,6 +366,8 @@ $ xxd -s 0x40 -l 16 exefs/main
 ```
 
 `3CA12DFAAF9C82DA064D1698DF79CDA1` is 1.0.0. If you see `b424be15…` instead, that's 1.3.0: the Update was still enabled.
+
+> **Later addition, by [Reilly Brogan](https://github.com/ReillyBrogan) ([PR #2](https://github.com/Scherso/SMOInterp/pull/2)):** `b424be15…` is the executable shared by the 1.3.0, 1.4.0 and 1.4.1 updates, and the mod now supports it too.
 
 - **Decompressing it.** The NSO's segments are LZ4-compressed. [hactool](https://github.com/SciresM/hactool) unpacks them. Decompressing needs no keys, so we point it at an empty key file; otherwise hactool loads `~/.switch/prod.keys` if you have one and prints warnings containing key values.
 
@@ -1026,6 +1030,8 @@ $ echo 0x63 0xde 0x9c 0x14 | llvm-mc --disassemble -triple=aarch64
 | `0x899510` | `al::FluidSimulateWave::update` | `Orig` only on logic frames. |
 | `0x9ce52c` | `al::Scene::~Scene` | Drop the saved scene and all history ([Attempt 3](#attempt-3-replay-the-scenes-graphics-update)). |
 
+> **Later addition, by [Reilly Brogan](https://github.com/ReillyBrogan) ([PR #2](https://github.com/Scherso/SMOInterp/pull/2)):** the `updateGpuBuffer` (`0x93fbc0`) and `updatePartsGraphics` (`0x8799b4`) hooks have been removed. Both are out-of-line copies that nothing in 1.0.0 calls or points to, so they never ran and removing them changes nothing. See [Water, sky and ripples](#water-sky-and-ripples).
+
 Plus one more, `nvnBootstrapLoader`, for the frame rate ([Section IX](#section-ix)).
 
 <br />
@@ -1048,6 +1054,8 @@ $ xxd -s $((0x100 + 0x1c4d014)) -l 32 main-1.0.0.raw
 - then the 16-byte build ID, at `main+0x1c4d024`.
 
 `exl_main` compares those 16 bytes with `3ca12dfa…cda1`. On a mismatch it logs `main is not SMO 1.0.0` and returns without installing a single hook.
+
+> **Later addition, by [Reilly Brogan](https://github.com/ReillyBrogan) ([PR #2](https://github.com/Scherso/SMOInterp/pull/2)):** `exl_main` now compares those 16 bytes with every build it knows and picks that build's offset table: 1.0.0 (`3ca12dfa…cda1`, note payload at `main+0x1c4d024`) or 1.3.0 / 1.4.0 / 1.4.1 (`b424be15…9ebf`, at `main+0x1199dbc`). With no match it logs and installs nothing.
 
 <br />
 
@@ -1135,6 +1143,8 @@ With only the camera blended, there was a clear jitter to Mario's movement, and 
 ### Every model's skeleton.
 
 `al::ModelCtrl` computes a model's pose on ticks (`ModelCtrl::calc` -> `nn::g3d::SkeletonObj::CalculateWorldMtx`, on `[[ModelCtrl+0]+0x38]`, i.e. ModelCtrl -> ModelObj -> SkeletonObj), and uploads it per frame in `updateModelDrawBuffer` (`0x93fe7c`) and `updateGpuBuffer` (`0x93fbc0`), on the engine's worker threads. Poses computed on ticks, uploaded per frame: that's the seam.
+
+> **Later addition, by [Reilly Brogan](https://github.com/ReillyBrogan) ([PR #2](https://github.com/Scherso/SMOInterp/pull/2)):** only `updateModelDrawBuffer` actually runs (called from `al::ModelDrawerBufferUpdate::draw`). `updateGpuBuffer` is never called, so its hook was dropped.
 
 `nn::g3d` is Nintendo's SDK, so the decomp doesn't cover it, but its code is in `main`:
 
@@ -1289,6 +1299,19 @@ $ python3 dis.py 0x899510 | sed -n '6,13p'
 
 `SineWave::update` does `phase += info.step`, and `FluidSimulateWave::update` (the ripples) does `prevTime = time; time += info.step`. **The first field is a time step, 1.0 per call.** These run with the render bookkeeping, which since [Attempt 5](#attempt-5-buildings-flickering-in-and-out) runs every frame, so all of them were animating at double speed. **Fix:** scale that step by the frame's share of a tick, and restore it after.
 
+> **Later addition, by [Reilly Brogan](https://github.com/ReillyBrogan) ([PR #2](https://github.com/Scherso/SMOInterp/pull/2)):** this fix never took effect. `updatePartsGraphics` above is only an out-of-line copy that nothing branches to. The loop that actually runs is inlined into `GraphicsSystemInfo::updateGraphics` (`0x8797bc`), and it passes a fixed `0x3c888889` (1/60 s) on every call:
+>
+> ```bash
+> $ python3 dis.py 0x8797bc | sed -n '1,14p'
+>   8797cc: mov w8, #0x3c880000
+>   8797d0: movk w8, #0x8889
+>   8797dc: str w8, [sp, #0x8]
+>   8797f4: add x1, sp, #0x8
+>   8797f8: blr x8
+> ```
+>
+> So the water surface, sky and clouds advance 1/60 s per rendered frame and run at twice game speed at 120 fps. Hooking the out-of-line function does nothing, so that hook was removed; scaling the inlined step by the frame's share is still TODO.
+
 Ripples needed one more rule: `FluidSimulateWave::calcGpu` runs **one fixed simulation step** whenever `time − prevTime` isn't near zero, whatever its size. A half-size step is still a full ripple step. So `FluidSimulateWave::update` only runs on logic frames; on draw-only frames the difference stays 0 and the step is skipped.
 
 A second screenshot showed Mario looking ghosted in the water. That one happens with the mod off too, so it's just how SMO's water looks in the emulator.
@@ -1311,6 +1334,8 @@ In practice, full extrapolation had a very visible flaw: when Mario starts a rol
 | Effect anchors (`EmitterSet` placement) | `EmitterSet::Calculate`, now run every frame | the set moved > 10 m, or its slot was reused |
 | Particle simulation | `nn::vfx::System::Calculate(group, rate)`, rate * frame share | the group is paused (rate 0) |
 | Water, sky and clouds | `updatePartsGraphics`, time step * frame share | never; ripples only step on logic frames |
+
+> **Later addition, by [Reilly Brogan](https://github.com/ReillyBrogan) ([PR #2](https://github.com/Scherso/SMOInterp/pull/2)):** bones are now blended around `ModelCtrl::updateModelDrawBuffer` only. Water, sky and clouds are not interpolated: `GraphicsSystemInfo::updateGraphics` passes a fixed 1/60 per frame, so they run faster above 60 fps.
 
 <br />
 
@@ -1449,6 +1474,9 @@ Now it renders 120 frames smoothly :)
 - **`interpolation = on` draws up to one tick (16.7 ms) behind.** `camera` removes that delay for the camera only; `extrapolate` (experimental) removes it everywhere, but can overshoot for a frame.
 - **The HUD isn't interpolated.** Its animations advance at the game's normal 60 Hz, exactly as without the mod; only the 3D world, camera and effects get the extra frames.
 - **Only 1.0.0.** Every address here is from OdysseyDecomp's 1.0.0 map; supporting 1.3.0 would mean finding all of them again.
+- **Later additions, by [Reilly Brogan](https://github.com/ReillyBrogan) ([PR #2](https://github.com/Scherso/SMOInterp/pull/2)):**
+  - **Supported builds: 1.0.0 and 1.3.0 / 1.4.0 / 1.4.1.** The 1.3.0 / 1.4.0 / 1.4.1 addresses were transferred from OdysseyDecomp's 1.0.0 map and checked against the 1.4.1 update's `main`.
+  - **Water, sky and clouds aren't interpolated.** The live parts loop is inlined in `GraphicsSystemInfo::updateGraphics` and uses a fixed 1/60 s step per rendered frame, so they run faster above 60 fps. The out-of-line `updatePartsGraphics` is dead code; hooking it does nothing.
 - **Not yet tested:** bosses, Odyssey warps, snapshot mode, 2-player mode, moon cutscenes.
 
 <br />

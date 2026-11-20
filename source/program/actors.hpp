@@ -5,9 +5,9 @@
 /*
  * Actor (model) interpolation. Every model's bone world matrices live in its
  * nn::g3d::SkeletonObj, computed on game ticks and uploaded to the GPU once per rendered frame by
- * al::ModelCtrl::updateModelDrawBuffer / updateGpuBuffer (which run on the engine's worker
- * threads). Around each upload we record the tick's final matrices, write a blend of the last two
- * ticks into the skeleton, let the upload happen, and put the game's own matrices back.
+ * al::ModelCtrl::updateModelDrawBuffer (which runs on the engine's worker threads). Around each
+ * upload we record the tick's final matrices, write a blend of the last two ticks into the
+ * skeleton, let the upload happen, and put the game's own matrices back.
  */
 namespace smo::actors {
     /* Called on the main thread when a logic tick starts; advances the history. */
