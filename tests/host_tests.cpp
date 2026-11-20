@@ -395,6 +395,14 @@ namespace {
         PacingRun slow = RunPaced(true, 120, TicksPerSecond / 100, 0, 1000);
         CHECK(slow.ticks >= 599 && slow.ticks <= 601);
 
+        /*
+         * A sustained slowdown long enough to look like a hitch on every frame (95 fps against
+         * fps = 180) must still tick. Re-arming the phase on every hitch pinned the accumulator to
+         * phase + frame (0.80 of a step here) and the clock stopped for good.
+         */
+        PacingRun slowHitch = RunPaced(true, 180, TicksPerSecond / 95, 0, 1000);
+        CHECK(slowHitch.ticks >= 630 && slowHitch.ticks <= 632);
+
         /* 144 Hz is 12 frames per 5 ticks: with jitter, the tick pattern and the blends repeat every 12 frames. */
         {
             smo::clock::FrameClock clock;

@@ -36,9 +36,10 @@ namespace smo::clock {
      *    1/PacingDriftLimitDivisor of a frame it's handed over at once, so game speed stays right.
      *  - A hitch (one frame more than 1/PacingHitchDivisor off) uses measured time straight away.
      *
-     * When pacing starts, and again after every hitch, the accumulator's phase is set so tick
-     * boundaries fall between frames (at 120 Hz, frames are drawn at 0.25 and 0.75 of a tick), never
-     * on one, where tiny corrections would flip which frame ticks. Whole ticks still owed are kept.
+     * When pacing starts, and once when a run of hitches begins, the accumulator's phase is set so
+     * tick boundaries fall between frames (at 120 Hz, frames are drawn at 0.25 and 0.75 of a tick),
+     * never on one, where tiny corrections would flip which frame ticks. Whole ticks still owed are
+     * kept.
      */
     constexpr std::int64_t PacingDriftGain = 16;
     constexpr std::int64_t PacingDriftLimitDivisor = 4;
@@ -59,6 +60,8 @@ namespace smo::clock {
         std::uint64_t expectedRemainder = 0;
         /* Smooth pacing: the phase has been set since pacing started or since the last hitch. */
         bool locked = false;
+        /* Smooth pacing: the previous frame was a hitch, so a run of them re-phases only once. */
+        bool hitched = false;
 
         /*
          * One rendered frame at system tick `now`. `targetFps` is the configured display rate;
@@ -121,12 +124,21 @@ namespace smo::clock {
 
             std::int64_t error = static_cast<std::int64_t>(measured) - frame;
             if (error > frame / PacingHitchDivisor || error < -frame / PacingHitchDivisor) {
-                /* A hitch or stall: real time, including anything still owed; re-phase on the next frame. */
+                /*
+                 * A hitch or stall: real time, including anything still owed. Re-phase on the first
+                 * frame of a run of hitches only: re-arming resets the accumulator to the phase
+                 * offset, and a steady rate slow enough to look like a hitch every frame but shorter
+                 * than one step minus that offset would then never reach a step again (95 fps against
+                 * fps = 180 stopped the clock for good).
+                 */
                 std::int64_t used = static_cast<std::int64_t>(measured) + drift;
                 drift = 0;
-                locked = false;
+                if (!hitched)
+                    locked = false;
+                hitched = true;
                 return used > 0 ? static_cast<std::uint64_t>(used) : 0;
             }
+            hitched = false;
 
             drift += error;
             if (drift > frame / PacingDriftLimitDivisor || drift < -frame / PacingDriftLimitDivisor) {
