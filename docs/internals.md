@@ -100,9 +100,11 @@ With `interpolation = extrapolate`, `alpha` runs from 1 to 2 instead, so each fr
 
 The game itself never sees a blended value: everything is written just before the renderer reads it and restored afterwards.
 
+The camera has to go in at the *start* of the tick's render-side work, not just before the draw. `updateKitListPostOnNerveEnd` runs `LiveActorKit::updateGraphics`: the async view-update jobs and `GraphicsSystemInfo`'s per-frame state, both built from the camera. Blending after that (at `preDrawGraphics` or `waitUpdateCalcView`) leaves that state one sub-tick offset away from the camera the frame is drawn with, and the game's temporal reprojection then samples the previous frame at a slightly wrong pose: thin raised detail shimmers while the camera moves, while flat surfaces stay clean. It disappears with `camera = off` because the offset is zero there, and it is invisible with the camera still, so a still-camera test will not reproduce it.
+
 | What | Where it's blended | Snaps (no blend) when |
 |---|---|---|
-| Camera position, target, up and FOV | `LiveActorKit::preDrawGraphics`, before the renderer copies the view | the camera jumps > 10 m or turns > 30° in one tick |
+| Camera position, target, up and FOV | `updateKitListPostOnNerveEnd`, before `LiveActorKit::updateGraphics` builds the tick's render state | the camera jumps > 10 m or turns > 30° in one tick |
 | Every model's bone world matrices | `ModelCtrl::updateModelDrawBuffer`, around the GPU upload | the root moves > 10 m in one tick, or the model skipped a tick |
 | Effect anchors (`EmitterSet` placement) | `EmitterSet::Calculate`, now run every frame | the set moved > 10 m, or its slot was reused for a new effect |
 | Particle simulation | `nn::vfx::System::Calculate(group, rate)`, with `rate` scaled to each frame's share of a tick | the group is paused (rate 0) |
