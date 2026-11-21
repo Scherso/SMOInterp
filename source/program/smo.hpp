@@ -147,6 +147,16 @@ namespace smo::offsets {
         ptrdiff_t PrePassLightKeeper_execute;
 
         /*
+         * al::RainTextureKeeper::update, reached from GraphicsSystemInfo::updateGraphics. It feeds
+         * raindrops into the ripple simulation (FluidSimulateWave::storePoint), whose step only runs
+         * on game ticks: left on every frame it adds points twice per step and the ripple buffers
+         * overflow (crash in RainTextureKeeper::update via PointSpriteCursor::store).
+         * Found by following updateKitListPostOnNerveEnd -> LiveActorKit::updateGraphics ->
+         * GraphicsSystemInfo::updateGraphics -> thunk -> here, not from OdysseyDecomp.
+         */
+        ptrdiff_t RainTextureKeeper_update;
+
+        /*
          * Camera interpolation point: runs at the end of every scene tick (and in our draw-only replay),
          * after the camera for the tick is final and before GraphicsSystemInfo::preDrawGraphics copies it
          * into the renderer's ViewInfo, view-frustum culling and GPU view uniforms.
@@ -206,6 +216,7 @@ namespace smo::offsets {
         .ModelOcclusionCullingDirector_clearRequest = 0x94ce1c,
         .ModelOcclusionCullingDirector_calc = 0x94cee8,
         .PrePassLightKeeper_execute = 0x8c23fc,
+        .RainTextureKeeper_update = 0xa2a244,
         .LiveActorKit_preDrawGraphics = 0x910650,
         .LookAtCamera_doUpdateMatrix = 0x75c238,
         .Projection_setProj = 0x9c05f0,
@@ -237,6 +248,7 @@ namespace smo::offsets {
         .ModelOcclusionCullingDirector_clearRequest = 0x6bb280,
         .ModelOcclusionCullingDirector_calc = 0x6bb370,
         .PrePassLightKeeper_execute = 0x6450b0,
+        .RainTextureKeeper_update = 0x7ab0a0,
         .LiveActorKit_preDrawGraphics = 0x6820a0,
         .LookAtCamera_doUpdateMatrix = 0x9661a0,
         .Projection_setProj = 0x73de60,
@@ -268,6 +280,7 @@ namespace smo::offsets {
     inline ptrdiff_t& ModelOcclusionCullingDirector_clearRequest = s_Active.ModelOcclusionCullingDirector_clearRequest;
     inline ptrdiff_t& ModelOcclusionCullingDirector_calc = s_Active.ModelOcclusionCullingDirector_calc;
     inline ptrdiff_t& PrePassLightKeeper_execute = s_Active.PrePassLightKeeper_execute;
+    inline ptrdiff_t& RainTextureKeeper_update = s_Active.RainTextureKeeper_update;
     inline ptrdiff_t& LiveActorKit_preDrawGraphics = s_Active.LiveActorKit_preDrawGraphics;
     inline ptrdiff_t& LookAtCamera_doUpdateMatrix = s_Active.LookAtCamera_doUpdateMatrix;
     inline ptrdiff_t& Projection_setProj = s_Active.Projection_setProj;

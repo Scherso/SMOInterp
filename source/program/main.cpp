@@ -127,6 +127,19 @@ HOOK_DEFINE_TRAMPOLINE(PrePassLightKeeperExecute) {
     }
 };
 
+/*
+ * RainTextureKeeper::update runs from GraphicsSystemInfo::updateGraphics, which draw-only frames
+ * replay, and feeds raindrops into the ripple simulation (FluidSimulateWave::storePoint). The
+ * ripple step only runs on game ticks, so rain on every frame adds points twice per step and the
+ * ripple buffers overflow. Keep rain on the ripple step's cadence.
+ */
+HOOK_DEFINE_TRAMPOLINE(RainTextureKeeperUpdate) {
+    static void Callback(void* keeper) {
+        if (s_Clock.runCalcThisFrame)
+            Orig(keeper);
+    }
+};
+
 HOOK_DEFINE_TRAMPOLINE(UpdateKitListPostOnNerveEnd) {
     static void Callback(void* scene) {
         Orig(scene);
@@ -295,13 +308,17 @@ extern "C" void exl_main(void* x0, void* x1) {
         return;
     }
     smo::offsets::Select(*table);
-    Logging.Log("using offsets for SMO %s", table->name);
+    /* Bases, so a crash address in an emulator log can be turned back into an offset. */
+    const auto& self = exl::util::GetSelfModuleInfo().m_Total;
+    Logging.Log("using offsets for SMO %s (main at %p, mod at %p)", table->name,
+                reinterpret_cast<void*>(main.m_Start), reinterpret_cast<void*>(self.m_Start));
 
     smo::nvn::InstallHooks();
     ProcFrame::InstallAtOffset(smo::offsets::GameFrameworkNx_procFrame);
     GameSystemMovement::InstallAtOffset(smo::offsets::GameSystem_movement);
     ControllerMgrCalc::InstallAtOffset(smo::offsets::ControllerMgr_calc);
     PrePassLightKeeperExecute::InstallAtOffset(smo::offsets::PrePassLightKeeper_execute);
+    RainTextureKeeperUpdate::InstallAtOffset(smo::offsets::RainTextureKeeper_update);
     UpdateKitListPostOnNerveEnd::InstallAtOffset(smo::offsets::updateKitListPostOnNerveEnd);
     LiveActorKitPreDrawGraphics::InstallAtOffset(smo::offsets::LiveActorKit_preDrawGraphics);
     EffectSystemPreprocess::InstallAtOffset(smo::offsets::EffectSystem_preprocess);
