@@ -75,6 +75,7 @@ Choosing the gate was most of the work. Each attempt below was tested in-game; t
 | + replay all of `Scene::movement`'s render steps | Works | Draw-only frames now run the scene's render-side work in the same order as a real tick, minus `updateNerve`/`control`. |
 | + skip `PrePassLightKeeper::execute` on draw-only frames | Fixes lights going dark | Lights resubmit themselves every update, and only the tick clears the buffer; resubmitting overflowed it and lights dropped out. |
 | Gate `sead::ControllerMgr::calc` with the tick | Fixes dropped inputs | Pads polled at 120 Hz turned a press into "held" before the 60 Hz game logic ever saw the trigger edge. |
+| + skip `RainTextureKeeper::update` on draw-only frames | Fixes freezes and crashes in rain | It adds raindrops with `FluidSimulateWave::storePoint`, but the ripple step only runs on ticks, so rain on every frame added twice the points it consumed and the ripple buffers overflowed over neighbouring heap objects. |
 
 The draw-only frame replays this part of `al::Scene::movement`:
 
@@ -106,6 +107,7 @@ The game itself never sees a blended value: everything is written just before th
 | Effect anchors (`EmitterSet` placement) | `EmitterSet::Calculate`, now run every frame | the set moved > 10 m, or its slot was reused for a new effect |
 | Particle simulation | `nn::vfx::System::Calculate(group, rate)`, with `rate` scaled to each frame's share of a tick | the group is paused (rate 0) |
 | Water, sky and clouds | not interpolated; `GraphicsSystemInfo::updateGraphics` passes a fixed 1/60 per frame | — (runs faster above 60 fps) |
+| Rain and its ripples | not interpolated; `RainTextureKeeper::update` and `FluidSimulateWave::update` both run on game steps | — (keeps 60 Hz) |
 
 Model uploads run on the engine's worker threads, so the per-skeleton history lives in a lock-free table.
 

@@ -80,7 +80,7 @@ GitHub Actions builds every push. Pushing a `v*` tag publishes a release.
 
 - Button presses still register at 60 Hz. With `interpolation = on` the picture runs up to one logic step (16.7 ms) behind; `extrapolate` avoids that but has the possibility of overshooting for a frame.
 - HUD isn't interpolated. I don't think this matters that much. If someone wants to pr and make it work go for it. 
-- Water, sky and clouds aren't interpolated and run faster above 60 fps: `GraphicsSystemInfo::updateGraphics` passes a fixed 1/60 s step per rendered frame. The standalone `updatePartsGraphics` is unreferenced (dead code), so hooking it does nothing.
+- Water, sky and clouds aren't interpolated and run faster above 60 fps: `GraphicsSystemInfo::updateGraphics` passes a fixed 1/60 s step per rendered frame. Rain is gated to game steps along with the ripples it spawns, so both keep the right speed. The standalone `updatePartsGraphics` is unreferenced (dead code), so hooking it does nothing.
 
 ## How it works
 
@@ -121,7 +121,7 @@ The callback then decides what happens. For `GameSystem::movement`, it calls the
 
 ### 3. What each hook does
 
-All addresses are offsets from the start of the game's `main` executable: [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp)'s `data/file_list.yml` for 1.0.0, and the update's `main` for 1.3.0 / 1.4.0 / 1.4.1. The table shows 1.0.0's addresses; each supported build has its own offset table.
+All addresses are offsets from the start of the game's `main` executable: [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp)'s `data/file_list.yml` for 1.0.0, and the update's `main` for 1.3.0 / 1.4.0 / 1.4.1. The table shows 1.0.0's addresses; each supported build has its own offset table. Weather functions aren't in OdysseyDecomp, so `RainTextureKeeper::update` was found by following the call chain from `updateKitListPostOnNerveEnd`, and its 1.0.0 address checked against the symbols in the game's own `dynsym`.
 
 | Address | Function | What SMOInterp does |
 |---|---|---|
@@ -137,6 +137,7 @@ All addresses are offsets from the start of the game's `main` executable: [Odyss
 | `0x887454` | `al::EffectSystem::preprocess` | Recorded on game steps and repeated on in-between frames. |
 | `0xb38fd4` | `nn::vfx::System::Calculate` | Advances particles by each frame's share of a step instead of a whole step. |
 | `0x899510` | `FluidSimulateWave::update` | Water ripples only step on game steps. |
+| `0xa2a244` | `al::RainTextureKeeper::update` | Skipped on in-between frames: it adds raindrops to the ripple simulation, which only steps on game steps. |
 | `0x9ce52c` | `al::Scene::~Scene` | Clears all saved history when a scene is unloaded. |
 
 One more hook sets the frame rate. SMO looks up its graphics (NVN) functions by name at runtime, so the mod hooks that lookup (`nvnBootstrapLoader`) and swaps `nvnWindowSetPresentInterval` / `nvnWindowBuilderSetPresentInterval` for versions that ask Eden for your `fps` instead of 60.
