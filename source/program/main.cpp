@@ -82,8 +82,45 @@ namespace {
 
     /* The scene whose graphics were updated by the last game tick, refreshed on draw-only frames. */
     void* s_GraphicsScene = nullptr;
-    /* The camera is captured once per tick, at the tick's first preDrawGraphics. */
+    /* The camera is captured once per tick, at the tick's first render-side step. */
     bool s_CameraCapturedThisTick = false;
+
+    /*
+     * The scene camera info: al::LiveActorKit+0x78 is the CameraDirector, +0x10 its SceneCameraInfo.
+     */
+    void* SceneCameraInfo(void* kit) {
+        void* director = kit ? Field<void*>(kit, smo::fields::LiveActorKit_cameraDirector) : nullptr;
+        return director ? Field<void*>(director, smo::fields::CameraDirector_sceneCameraInfo) : nullptr;
+    }
+
+    /*
+     * The scene's kit: al::Scene+0x90 is its LiveActorKit.
+     */
+    void* SceneKit(void* scene) {
+        return scene ? Field<void*>(scene, smo::fields::Scene_liveActorKit) : nullptr;
+    }
+
+    /*
+     * Put this frame's camera in place before the frame's render-side work, not just before the draw.
+     * The simulation ends by building render state from the camera (LiveActorKit::updateGraphics: the
+     * async view-update jobs, then GraphicsSystemInfo's per-frame work), and the draw later uses
+     * whatever camera is in the CameraDirector. Blending only after that state was built leaves the two
+     * on different cameras by the blend's sub-tick offset; on detail edges the game's temporal
+     * reprojection then samples the previous frame at a slightly wrong pose, which shimmers while the
+     * camera moves (and is invisible when it does not, or with camera = off, where the offset is zero).
+     *
+     * Capturing here is safe because the scene's nerve has finished posing the camera: this runs at the
+     * end of the tick. On a draw-only frame the tick's camera was captured already, so this only
+     * repeats the blend.
+     */
+    void ApplyCameraForFrame(void* kit) {
+        void* cameraInfo = SceneCameraInfo(kit);
+        if (s_Clock.runCalcThisFrame && !s_CameraCapturedThisTick) {
+            smo::camera::Capture(cameraInfo);
+            s_CameraCapturedThisTick = true;
+        }
+        smo::camera::Apply(cameraInfo, s_Blend.camera);
+    }
 
     /* The effect systems and groups the last tick updated, replayed on draw-only frames. */
     struct EffectGroupCall {
@@ -142,6 +179,9 @@ HOOK_DEFINE_TRAMPOLINE(RainTextureKeeperUpdate) {
 
 HOOK_DEFINE_TRAMPOLINE(UpdateKitListPostOnNerveEnd) {
     static void Callback(void* scene) {
+        /* Runs LiveActorKit::updateGraphics, so the blend has to be in place before it: see
+         * ApplyCameraForFrame. This is the tick's first render-side step. */
+        ApplyCameraForFrame(SceneKit(scene));
         Orig(scene);
         s_GraphicsScene = scene;
     }
@@ -149,15 +189,9 @@ HOOK_DEFINE_TRAMPOLINE(UpdateKitListPostOnNerveEnd) {
 
 HOOK_DEFINE_TRAMPOLINE(LiveActorKitPreDrawGraphics) {
     static void Callback(void* kit) {
-        void* director = Field<void*>(kit, smo::fields::LiveActorKit_cameraDirector);
-        void* cameraInfo = director ? Field<void*>(director, smo::fields::CameraDirector_sceneCameraInfo) : nullptr;
-
-        if (s_Clock.runCalcThisFrame && !s_CameraCapturedThisTick) {
-            smo::camera::Capture(cameraInfo);
-            s_CameraCapturedThisTick = true;
-        }
-        smo::camera::Apply(cameraInfo, s_Blend.camera);
-
+        /* Usually already blended by UpdateKitListPostOnNerveEnd; this makes sure the renderer's copy
+         * of the camera (ViewInfo) is the frame's camera. */
+        ApplyCameraForFrame(kit);
         Orig(kit);
     }
 };
@@ -238,9 +272,12 @@ HOOK_DEFINE_TRAMPOLINE(SceneDtor) {
 namespace {
     /* al::Scene::movement minus updateNerve/control: every render-side step, paired with this frame's draw. */
     void RefreshSceneGraphics(void* scene) {
-        void* kit = Field<void*>(scene, smo::fields::Scene_liveActorKit);
+        void* kit = SceneKit(scene);
         if (kit == nullptr)
             return;
+
+        /* Before updateGraphics: it and the model uploads must see the same camera the frame draws with. */
+        ApplyCameraForFrame(kit);
 
         void* graphics = Field<void*>(kit, smo::fields::LiveActorKit_graphicsSystemInfo);
         void* occlusion =

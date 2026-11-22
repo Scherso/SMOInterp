@@ -111,7 +111,8 @@ namespace smo::offsets {
         /*
          * Scenes end every tick with al::updateKitListPostOnNerveEnd: LiveActorKit::updateGraphics
          * (per-actor async graphics jobs, GraphicsSystemInfo::updateGraphics) then preDrawGraphics.
-         * The scene's draw depends on it running once per frame.
+         * The scene's draw depends on it running once per frame, and it is where the camera blend is
+         * applied: updateGraphics builds render state from the camera.
          */
         ptrdiff_t updateKitListPostOnNerveEnd;
 
@@ -157,9 +158,9 @@ namespace smo::offsets {
         ptrdiff_t RainTextureKeeper_update;
 
         /*
-         * Camera interpolation point: runs at the end of every scene tick (and in our draw-only replay),
-         * after the camera for the tick is final and before GraphicsSystemInfo::preDrawGraphics copies it
-         * into the renderer's ViewInfo, view-frustum culling and GPU view uniforms.
+         * GraphicsSystemInfo::preDrawGraphics copies the camera into the renderer's ViewInfo, view-frustum
+         * culling and GPU view uniforms. The blend is already in place by then (it goes in before
+         * updateGraphics); this re-applies it so the renderer's copy is the frame's camera.
          */
         ptrdiff_t LiveActorKit_preDrawGraphics;
         ptrdiff_t LookAtCamera_doUpdateMatrix;
